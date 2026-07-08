@@ -1,0 +1,129 @@
+/* SilverGravity UML - Core Design System */
+
+:root {
+  /* Colors - Dark-Silver Minimalist Palette */
+  --bg-app: #121316;          /* Deep dark slate-silver */
+  --bg-canvas: #18191c;       /* Canvas workspace background */
+  --bg-panel: #202227;        /* Sidebar and floating dialog panel background */
+  --bg-element: #2b2e35;      /* Base element / class node background */
+  --bg-hover: #373b44;        /* Solid hover state background */
+  --bg-active: #454a55;       /* Solid active/selected node background */
+  
+  --border-dim: #2d3037;      /* Subtle border */
+  --border-normal: #40444f;   /* Standard 1px flat border */
+  --border-focus: #5c87b8;    /* High contrast solid focus state border */
+  --border-accent: #8fb1d6;   /* High contrast highlighted border */
+
+  --text-primary: #ffffff;    /* Primary text */
+  --text-secondary: #a0a6b2;  /* Secondary text / labels */
+  --text-dim: #6c7280;        /* Dimmed text / helper info */
+  --text-accent: #8fb1d6;     /* Accent text color */
+
+  /* Spacing Grid (8pt system) */
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+/* Reset */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbars - Solid and Flat */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-normal);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-focus);
+}
+
+/* Grid Snapping Helper Classes */
+.grid-snapped-8 {
+  grid-gap: var(--space-8);
+}
+.grid-snapped-16 {
+  grid-gap: var(--space-16);
+}
+
+/* High Contrast AAA Interactive Controls */
+button, input, select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+button {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8) var(--space-16);
+  background-color: var(--bg-element);
+  border: 1px solid var(--border-normal);
+  font-weight: 500;
+}
+
+button:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--border-focus);
+}
+
+button:active {
+  background-color: var(--bg-active);
+}
+
+button:focus-visible {
+  border-color: var(--border-accent);
+  outline: 2px solid var(--border-accent);
+}
+
+input[type="text"], select {
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-normal);
+  padding: var(--space-8);
+  width: 100%;
+}
+
+input[type="text"]:focus, select:focus {
+  border-color: var(--border-accent);
+}

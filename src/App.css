@@ -1,0 +1,356 @@
+/* SilverGravity UML App Stylesheet */
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background-color: var(--bg-app);
+  overflow: hidden;
+}
+
+/* Header Toolbar */
+.toolbar {
+  height: 56px;
+  background-color: var(--bg-panel);
+  border-bottom: 1px solid var(--border-normal);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-16);
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.toolbar-title {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-primary);
+  margin-right: var(--space-16);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  border-right: 1px solid var(--border-normal);
+  padding-right: var(--space-16);
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 0;
+}
+
+.btn-text {
+  gap: var(--space-8);
+  font-size: 13px;
+  height: 36px;
+}
+
+.zoom-indicator {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 var(--space-8);
+}
+
+/* Layout Split */
+.editor-layout {
+  display: flex;
+  flex-direction: row;
+  flex-grow: 1;
+  width: 100%;
+  height: calc(100% - 56px);
+  overflow: hidden;
+}
+
+/* Workspace Canvas */
+.canvas-container {
+  flex-grow: 1;
+  height: 100%;
+  position: relative;
+  background-color: var(--bg-canvas);
+  overflow: hidden;
+  cursor: grab;
+}
+
+.canvas-container:active {
+  cursor: grabbing;
+}
+
+.canvas-workspace {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 5000px;
+  height: 5000px;
+  transform-origin: 0 0;
+}
+
+/* Snapping Grid background */
+.canvas-grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background-image: 
+    radial-gradient(var(--border-dim) 1.5px, transparent 1.5px);
+  background-size: 32px 32px; /* Large grid intervals */
+}
+
+/* SVG Line Overlay */
+.connections-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.connection-line {
+  stroke: var(--border-normal);
+  stroke-width: 2px;
+  fill: none;
+}
+
+.connection-line.selected {
+  stroke: var(--border-focus);
+}
+
+.connection-line.drawing {
+  stroke: var(--border-accent);
+  stroke-dasharray: 4;
+}
+
+/* Interactive SVG path helpers (hidden labels/shapes) */
+.relationship-text {
+  fill: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* UML Class Node Cards */
+.uml-node {
+  position: absolute;
+  min-width: 200px;
+  background-color: var(--bg-element);
+  border: 1px solid var(--border-normal);
+  z-index: 2;
+  cursor: move;
+  display: flex;
+  flex-direction: column;
+}
+
+.uml-node.selected {
+  border: 1px solid var(--border-focus);
+}
+
+.uml-node-header {
+  padding: var(--space-8) var(--space-16);
+  border-bottom: 1px solid var(--border-normal);
+  text-align: center;
+  font-weight: bold;
+  font-size: 14px;
+  background-color: var(--bg-panel);
+}
+
+.uml-node-section {
+  padding: var(--space-8) var(--space-16);
+  border-bottom: 1px solid var(--border-normal);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 24px;
+}
+
+.uml-node-section:last-child {
+  border-bottom: none;
+}
+
+.uml-node-item {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Connection Ports */
+.port {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-normal);
+  z-index: 5;
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.15s, background-color 0.15s;
+}
+
+.uml-node:hover .port,
+.uml-node.selected .port {
+  opacity: 1;
+}
+
+.port:hover {
+  background-color: var(--border-focus);
+  border-color: var(--text-primary);
+}
+
+.port.port-top {
+  top: -6px;
+  left: calc(50% - 6px);
+}
+
+.port.port-right {
+  right: -6px;
+  top: calc(50% - 6px);
+}
+
+.port.port-bottom {
+  bottom: -6px;
+  left: calc(50% - 6px);
+}
+
+.port.port-left {
+  left: -6px;
+  top: calc(50% - 6px);
+}
+
+/* Sidebar Panel */
+.sidebar {
+  width: 320px;
+  background-color: var(--bg-panel);
+  border-left: 1px solid var(--border-normal);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 9;
+  flex-shrink: 0;
+}
+
+.sidebar-section {
+  padding: var(--space-16);
+  border-bottom: 1px solid var(--border-normal);
+}
+
+.sidebar-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-accent);
+  margin-bottom: var(--space-16);
+  letter-spacing: 0.5px;
+}
+
+.property-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-16);
+}
+
+.property-group:last-child {
+  margin-bottom: 0;
+}
+
+.property-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.property-row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: center;
+}
+
+.btn-small {
+  height: 32px;
+  padding: 0 var(--space-12);
+  font-size: 12px;
+}
+
+.btn-danger {
+  background-color: #3f1f24;
+  border-color: #7b2931;
+}
+.btn-danger:hover {
+  background-color: #58242c;
+  border-color: #a83d47;
+}
+
+/* Custom list items inside sidebar */
+.item-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-top: var(--space-8);
+}
+
+.item-list-row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.item-list-row input, .item-list-row select {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px;
+  height: 28px;
+}
+
+/* Connection Overlay Indicators (Arrowheads / Diamonds) */
+svg marker {
+  fill: var(--border-normal);
+}
+
+svg marker.selected {
+  fill: var(--border-focus);
+}
+
+/* Keyboard Hints / Help */
+.help-card {
+  background-color: var(--bg-element);
+  border: 1px solid var(--border-dim);
+  padding: var(--space-12);
+  margin-bottom: var(--space-16);
+}
+
+.help-title {
+  font-weight: bold;
+  font-size: 12px;
+  margin-bottom: var(--space-8);
+}
+
+.help-list {
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.help-key {
+  font-family: var(--font-mono);
+  background-color: var(--bg-app);
+  padding: 1px 4px;
+  border: 1px solid var(--border-normal);
+  color: var(--text-primary);
+}
