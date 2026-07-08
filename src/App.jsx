@@ -9,17 +9,20 @@ import {
   Maximize2, 
   Trash2, 
   BookOpen, 
-  ArrowRight,
   Database,
   Layers,
-  Sparkles
+  Sparkles,
+  Box,
+  GitBranch,
+  Keyboard,
+  Link2
 } from 'lucide-react';
 import './App.css';
 
 // Help helper component for shortcuts list
 const ShortcutHelp = () => (
   <div className="help-card">
-    <div className="help-title">Keyboard Shortcuts</div>
+    <div className="help-title"><Keyboard size={14} strokeWidth={2} /> Keyboard Shortcuts</div>
     <ul className="help-list">
       <li><span className="help-key">Double Click Canvas</span> Spawns new Class</li>
       <li><span className="help-key">Ctrl / Cmd + S</span> Quick Save</li>
@@ -737,7 +740,7 @@ export default function App() {
           onMouseUp={handleCanvasMouseUp}
           onDoubleClick={(e) => {
             // Double click on canvas empty space spawns node
-            if (e.target === canvasRef.current || e.target.classList.contains('canvas-grid')) {
+            if (e.target === canvasRef.current || e.target.tagName === 'rect') {
               addNewNode();
             }
           }}
@@ -749,29 +752,36 @@ export default function App() {
             }}
           >
             {/* Background alignment grid */}
-            <div className="canvas-grid" />
+            <svg className="canvas-grid-svg" width="5000" height="5000">
+              <defs>
+                <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+                  <circle cx="2" cy="2" r="1" fill="#dbe0e6" />
+                </pattern>
+              </defs>
+              <rect width="5000" height="5000" fill="url(#grid)" />
+            </svg>
 
             {/* SVG Relationship Connector lines */}
             <svg className="connections-overlay">
               <defs>
-                {/* UML Arrowheads definitions using Solid flat dark silver colors */}
+                {/* UML Arrowheads definitions - soft slate on light canvas */}
                 <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                  <path d="M 0 1 L 10 5 L 0 9" fill="none" stroke="var(--border-normal)" strokeWidth="1.5" />
+                  <path d="M 0 1 L 10 5 L 0 9" fill="none" stroke="#9aa2af" strokeWidth="1.5" />
                 </marker>
                 
                 {/* Hollow triangle for inheritance/generalization */}
                 <marker id="inheritance" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                  <path d="M 0 0 L 10 5 L 0 10 Z" fill="#18191c" stroke="var(--border-normal)" strokeWidth="1.5" />
+                  <path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffffff" stroke="#9aa2af" strokeWidth="1.5" />
                 </marker>
                 
                 {/* Filled diamond for Composition */}
                 <marker id="composition" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                  <path d="M 0 5 L 5 10 L 10 5 L 5 0 Z" fill="var(--border-normal)" />
+                  <path d="M 0 5 L 5 10 L 10 5 L 5 0 Z" fill="#9aa2af" />
                 </marker>
                 
                 {/* Hollow diamond for Aggregation */}
                 <marker id="aggregation" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-                  <path d="M 0 5 L 5 10 L 10 5 L 5 0 Z" fill="#18191c" stroke="var(--border-normal)" strokeWidth="1.5" />
+                  <path d="M 0 5 L 5 10 L 10 5 L 5 0 Z" fill="#ffffff" stroke="#9aa2af" strokeWidth="1.5" />
                 </marker>
               </defs>
 
@@ -917,6 +927,7 @@ export default function App() {
 
                   {/* Header Class name */}
                   <div className="uml-node-header">
+                    <Box size={14} strokeWidth={2} />
                     {node.name}
                   </div>
 
@@ -958,7 +969,7 @@ export default function App() {
           {/* Section: Properties */}
           {selectedNode ? (
             <div className="sidebar-section">
-              <div className="sidebar-title">Edit Class</div>
+              <div className="sidebar-title"><Box size={16} strokeWidth={2} /> Edit Class</div>
               
               <div className="property-group">
                 <label className="property-label">Class Name</label>
@@ -1110,7 +1121,7 @@ export default function App() {
             </div>
           ) : selectedConnection ? (
             <div className="sidebar-section">
-              <div className="sidebar-title">Edit Relationship</div>
+              <div className="sidebar-title"><GitBranch size={16} strokeWidth={2} /> Edit Relationship</div>
               
               <div className="property-group">
                 <label className="property-label">Relationship Type</label>
@@ -1167,7 +1178,7 @@ export default function App() {
             </div>
           ) : (
             <div className="sidebar-section">
-              <div className="sidebar-title">Global Overview</div>
+              <div className="sidebar-title"><Layers size={16} strokeWidth={2} /> Global Overview</div>
               
               <div className="help-card">
                 <div className="help-title" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1183,7 +1194,7 @@ export default function App() {
               <ShortcutHelp />
 
               <div className="help-card">
-                <div className="help-title">Connecting Nodes</div>
+                <div className="help-title"><Link2 size={14} strokeWidth={2} /> Connecting Nodes</div>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: '140%' }}>
                   Hover over any Class card to reveal the 4 connection ports (top, bottom, left, right). Click and drag from one port to another port to draw relationship associations.
                 </div>

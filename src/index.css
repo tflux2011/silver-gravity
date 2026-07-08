@@ -1,36 +1,74 @@
-/* SilverGravity UML - Core Design System */
+/* SilverGravity UML - Modern Minimalist Design System (Light + Amber) */
 
 :root {
-  /* Colors - Dark-Silver Minimalist Palette */
-  --bg-app: #121316;          /* Deep dark slate-silver */
-  --bg-canvas: #18191c;       /* Canvas workspace background */
-  --bg-panel: #202227;        /* Sidebar and floating dialog panel background */
-  --bg-element: #2b2e35;      /* Base element / class node background */
-  --bg-hover: #373b44;        /* Solid hover state background */
-  --bg-active: #454a55;       /* Solid active/selected node background */
-  
-  --border-dim: #2d3037;      /* Subtle border */
-  --border-normal: #40444f;   /* Standard 1px flat border */
-  --border-focus: #5c87b8;    /* High contrast solid focus state border */
-  --border-accent: #8fb1d6;   /* High contrast highlighted border */
+  /* Surfaces - Soft, airy light palette */
+  --bg-app: #f4f5f7;          /* App shell / neutral backdrop */
+  --bg-canvas: #f7f8fa;       /* Drawing canvas surface */
+  --bg-panel: #ffffff;        /* Toolbar & sidebar surfaces */
+  --bg-element: #ffffff;      /* Class node cards */
+  --bg-control: #ffffff;      /* Form input background */
+  --bg-subtle: #f8f9fb;       /* Subtle section fills */
 
-  --text-primary: #ffffff;    /* Primary text */
-  --text-secondary: #a0a6b2;  /* Secondary text / labels */
-  --text-dim: #6c7280;        /* Dimmed text / helper info */
-  --text-accent: #8fb1d6;     /* Accent text color */
+  /* Interaction states */
+  --bg-hover: #f1f2f5;        /* Neutral hover wash */
+  --bg-active: #e9ebef;       /* Pressed state */
 
-  /* Spacing Grid (8pt system) */
+  /* Borders - Soft hairlines */
+  --border-dim: #eef0f3;      /* Grid dots / faint dividers */
+  --border-normal: #e3e6ea;   /* Standard structural borders */
+  --border-strong: #d3d8df;   /* Emphasis borders */
+  --border-focus: #f59e0b;    /* Amber selection border */
+
+  /* Amber accent scale */
+  --accent: #f59e0b;          /* amber-500 */
+  --accent-hover: #ea9008;    /* between 500/600 */
+  --accent-strong: #d97706;   /* amber-600 */
+  --accent-soft: #fef6e6;     /* tinted background wash */
+  --accent-soft-strong: #fdecc8;
+  --accent-text: #b45309;     /* amber-700 for text on light */
+  --border-accent: #f59e0b;
+
+  /* Text - Accessible contrast */
+  --text-primary: #1a1d23;    /* Near-black ink */
+  --text-secondary: #5c6470;  /* Muted body text */
+  --text-dim: #98a0ac;        /* Helper / placeholder */
+  --text-accent: #b45309;     /* Amber label text */
+
+  /* Semantic (danger) */
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --danger-border: #f7c9c9;
+
+  /* Elevation */
+  --shadow-xs: 0 1px 2px rgba(20, 24, 33, 0.05);
+  --shadow-sm: 0 1px 3px rgba(20, 24, 33, 0.08), 0 1px 2px rgba(20, 24, 33, 0.04);
+  --shadow-md: 0 4px 12px rgba(20, 24, 33, 0.08);
+  --shadow-lg: 0 10px 30px rgba(20, 24, 33, 0.12);
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Spacing Grid (8pt System) */
   --space-4: 4px;
   --space-8: 8px;
+  --space-12: 12px;
   --space-16: 16px;
   --space-24: 24px;
   --space-32: 32px;
   --space-40: 40px;
   --space-48: 48px;
 
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 160ms;
+
   /* Typography */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* Reset */
@@ -47,9 +85,10 @@ html, body {
   background-color: var(--bg-app);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 13px;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -59,30 +98,24 @@ html, body {
   flex-direction: column;
 }
 
-/* Scrollbars - Solid and Flat */
+/* Scrollbars - Slim and unobtrusive */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-app);
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--border-normal);
+  background: #d5d9df;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--bg-panel);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-focus);
+  background: #bcc2cb;
 }
 
-/* Grid Snapping Helper Classes */
-.grid-snapped-8 {
-  grid-gap: var(--space-8);
-}
-.grid-snapped-16 {
-  grid-gap: var(--space-16);
-}
-
-/* High Contrast AAA Interactive Controls */
+/* Interactive Controls */
 button, input, select {
   font-family: inherit;
   font-size: inherit;
@@ -97,33 +130,72 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-8);
   padding: var(--space-8) var(--space-16);
-  background-color: var(--bg-element);
-  border: 1px solid var(--border-normal);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   font-weight: 500;
+  color: var(--text-secondary);
+  transition: background-color var(--dur) var(--ease),
+              border-color var(--dur) var(--ease),
+              color var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease),
+              transform var(--dur-fast) var(--ease);
 }
 
 button:hover {
   background-color: var(--bg-hover);
-  border-color: var(--border-focus);
+  color: var(--text-primary);
 }
 
 button:active {
   background-color: var(--bg-active);
+  transform: translateY(0.5px);
 }
 
 button:focus-visible {
-  border-color: var(--border-accent);
-  outline: 2px solid var(--border-accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input[type="text"], select {
-  background-color: var(--bg-app);
+  background-color: var(--bg-control);
   border: 1px solid var(--border-normal);
-  padding: var(--space-8);
+  border-radius: var(--radius-sm);
+  padding: var(--space-8) var(--space-12);
   width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  transition: border-color var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease);
+}
+
+input[type="text"]::placeholder {
+  color: var(--text-dim);
+}
+
+input[type="text"]:hover, select:hover {
+  border-color: var(--border-strong);
 }
 
 input[type="text"]:focus, select:focus {
-  border-color: var(--border-accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+input[type="text"]:disabled {
+  background-color: var(--bg-subtle);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
+select {
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235c6470' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
 }
