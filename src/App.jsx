@@ -3,6 +3,7 @@ import {
   File, 
   FolderOpen, 
   Save, 
+  Download,
   Plus, 
   ZoomIn, 
   ZoomOut, 
@@ -15,9 +16,77 @@ import {
   Box,
   GitBranch,
   Keyboard,
-  Link2
+  Link2,
+  Puzzle,
+  Shapes,
+  List
 } from 'lucide-react';
 import './App.css';
+
+// UML element type registry (class-family). Each node stores a `type`;
+// an undefined type is treated as 'class' for backward compatibility.
+const TYPE_ICONS = {
+  class: Box,
+  interface: Puzzle,
+  abstract: Shapes,
+  enumeration: List
+};
+
+const UML_ELEMENTS = {
+  class: {
+    label: 'Class',
+    stereotype: null,
+    italicName: false,
+    hasMethods: true,
+    isEnum: false,
+    seed: (t) => ({
+      attributes: [{ id: `attr-${t}-1`, visibility: '-', name: 'id', type: 'String' }],
+      methods: [{ id: `meth-${t}-1`, visibility: '+', name: 'execute', parameters: '', returnType: 'void' }]
+    })
+  },
+  interface: {
+    label: 'Interface',
+    stereotype: 'interface',
+    italicName: true,
+    hasMethods: true,
+    isEnum: false,
+    seed: (t) => ({
+      attributes: [],
+      methods: [{ id: `meth-${t}-1`, visibility: '+', name: 'operation', parameters: '', returnType: 'void' }]
+    })
+  },
+  abstract: {
+    label: 'Abstract Class',
+    stereotype: 'abstract',
+    italicName: true,
+    hasMethods: true,
+    isEnum: false,
+    seed: (t) => ({
+      attributes: [{ id: `attr-${t}-1`, visibility: '#', name: 'state', type: 'String' }],
+      methods: [{ id: `meth-${t}-1`, visibility: '+', name: 'process', parameters: '', returnType: 'void' }]
+    })
+  },
+  enumeration: {
+    label: 'Enumeration',
+    stereotype: 'enumeration',
+    italicName: false,
+    hasMethods: false,
+    isEnum: true,
+    seed: (t) => ({
+      attributes: [
+        { id: `attr-${t}-1`, visibility: '', name: 'VALUE_ONE', type: '' },
+        { id: `attr-${t}-2`, visibility: '', name: 'VALUE_TWO', type: '' }
+      ],
+      methods: []
+    })
+  }
+};
+
+// Resolve a node's element definition, defaulting to class.
+const elementDef = (type) => UML_ELEMENTS[type] || UML_ELEMENTS.class;
+
+// Ordered palette entries rendered in the left rail.
+const PALETTE_ITEMS = ['class', 'interface', 'abstract', 'enumeration'];
 
 // Help helper component for shortcuts list
 const ShortcutHelp = () => (
@@ -255,6 +324,101 @@ const COMPRO_TEMPLATE_CONNECTIONS = [
   }
 ];
 
+// Hospital Management System template data
+const HOSPITAL_TEMPLATE_NODES = [
+  {
+    id: 'hosp-dept',
+    name: 'Department',
+    x: 280,
+    y: 40,
+    attributes: [
+      { id: 'hd-1', visibility: '-', name: 'deptCode', type: 'String' },
+      { id: 'hd-2', visibility: '-', name: 'name', type: 'String' }
+    ],
+    methods: []
+  },
+  {
+    id: 'hosp-doc',
+    name: 'Doctor',
+    x: 80,
+    y: 180,
+    attributes: [
+      { id: 'doc-1', visibility: '-', name: 'employeeId', type: 'String' },
+      { id: 'doc-2', visibility: '-', name: 'specialty', type: 'String' }
+    ],
+    methods: [
+      { id: 'doc-m1', visibility: '+', name: 'diagnose', parameters: 'p: Patient', returnType: 'Record' }
+    ]
+  },
+  {
+    id: 'hosp-pat',
+    name: 'Patient',
+    x: 480,
+    y: 180,
+    attributes: [
+      { id: 'pat-1', visibility: '-', name: 'patientId', type: 'String' },
+      { id: 'pat-2', visibility: '-', name: 'medicalHistory', type: 'History' }
+    ],
+    methods: [
+      { id: 'pat-m1', visibility: '+', name: 'admit', parameters: '', returnType: 'void' }
+    ]
+  },
+  {
+    id: 'hosp-appt',
+    name: 'Appointment',
+    x: 280,
+    y: 320,
+    attributes: [
+      { id: 'ap-1', visibility: '-', name: 'appointmentId', type: 'String' },
+      { id: 'ap-2', visibility: '-', name: 'dateTime', type: 'Date' }
+    ],
+    methods: []
+  }
+];
+
+const HOSPITAL_TEMPLATE_CONNECTIONS = [
+  {
+    id: 'hc-dept-doc',
+    fromNodeId: 'hosp-dept',
+    fromPort: 'left',
+    toNodeId: 'hosp-doc',
+    toPort: 'top',
+    type: 'composition',
+    multiplicityFrom: '1',
+    multiplicityTo: '1..*'
+  },
+  {
+    id: 'hc-doc-pat',
+    fromNodeId: 'hosp-doc',
+    fromPort: 'right',
+    toNodeId: 'hosp-pat',
+    toPort: 'left',
+    type: 'association',
+    multiplicityFrom: '1..*',
+    multiplicityTo: '0..*'
+  },
+  {
+    id: 'hc-doc-appt',
+    fromNodeId: 'hosp-doc',
+    fromPort: 'bottom',
+    toNodeId: 'hosp-appt',
+    toPort: 'left',
+    type: 'association',
+    multiplicityFrom: '1',
+    multiplicityTo: '*'
+  },
+  {
+    id: 'hc-pat-appt',
+    fromNodeId: 'hosp-pat',
+    fromPort: 'bottom',
+    toNodeId: 'hosp-appt',
+    toPort: 'right',
+    type: 'association',
+    multiplicityFrom: '1',
+    multiplicityTo: '*'
+  }
+];
+
 export default function App() {
   const [nodes, setNodes] = useState(INITIAL_NODES);
   const [connections, setConnections] = useState(INITIAL_CONNECTIONS);
@@ -273,8 +437,22 @@ export default function App() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   
-  // Connection line drawing
   const [drawingConnection, setDrawingConnection] = useState(null);
+  
+  // Controlled input states for sidebar renaming
+  const [editingName, setEditingName] = useState('');
+  const [nameError, setNameError] = useState('');
+
+  // Sync input name when selection changes
+  useEffect(() => {
+    if (selectedNode) {
+      setEditingName(selectedNode.name);
+      setNameError('');
+    } else {
+      setEditingName('');
+      setNameError('');
+    }
+  }, [selectedNodeId, nodes]);
 
   const canvasRef = useRef(null);
   const nodeRefs = useRef({});
@@ -433,25 +611,46 @@ export default function App() {
     setPanY(50);
   };
 
+  const handleLoadHospitalTemplate = () => {
+    setNodes(HOSPITAL_TEMPLATE_NODES);
+    setConnections(HOSPITAL_TEMPLATE_CONNECTIONS);
+    setFilePath('HospitalManagementSystem.uml');
+    setSelectedNodeId(null);
+    setSelectedConnectionId(null);
+    setZoom(0.9);
+    setPanX(60);
+    setPanY(50);
+  };
+
   // Node operations
-  const addNewNode = () => {
-    // Generate class center position relative to current viewport
+  const addNode = (type = 'class') => {
+    const def = elementDef(type);
+
+    // Generate element position relative to current viewport
     const x = snapTo8(Math.max(80, -panX + 200));
     const y = snapTo8(Math.max(80, -panY + 150));
-    
+
+    // Disallow creating multiple elements with the same default name
+    const baseName = `New${def.label.replace(/\s+/g, '')}`;
+    let name = baseName;
+    let counter = 1;
+    while (nodes.some(n => n.name.toLowerCase() === name.toLowerCase())) {
+      name = `${baseName}${counter}`;
+      counter++;
+    }
+
+    const stamp = Date.now();
+    const seed = def.seed(stamp);
     const newNode = {
-      id: `node-${Date.now()}`,
-      name: `NewClass`,
+      id: `node-${stamp}`,
+      type,
+      name,
       x,
       y,
-      attributes: [
-        { id: `attr-${Date.now()}-1`, visibility: '+', name: 'id', type: 'String' }
-      ],
-      methods: [
-        { id: `meth-${Date.now()}-1`, visibility: '+', name: 'execute', parameters: '', returnType: 'void' }
-      ]
+      attributes: seed.attributes,
+      methods: seed.methods
     };
-    
+
     setNodes([...nodes, newNode]);
     setSelectedNodeId(newNode.id);
     setSelectedConnectionId(null);
@@ -465,8 +664,40 @@ export default function App() {
     }
   };
 
+  // Convert an existing element to another UML type. Enumerations drop
+  // their methods, since enums have no operations.
+  const updateNodeType = (nodeId, newType) => {
+    const def = elementDef(newType);
+    setNodes(nodes.map(n => {
+      if (n.id !== nodeId) return n;
+      const next = { ...n, type: newType };
+      if (!def.hasMethods) next.methods = [];
+      return next;
+    }));
+  };
+
   const updateNodeName = (nodeId, newName) => {
-    setNodes(nodes.map(n => n.id === nodeId ? { ...n, name: newName } : n));
+    const cleaned = newName.trim();
+    if (cleaned === '') return;
+    const isDuplicate = nodes.some(n => n.id !== nodeId && n.name.toLowerCase() === cleaned.toLowerCase());
+    if (!isDuplicate) {
+      setNodes(nodes.map(n => n.id === nodeId ? { ...n, name: cleaned } : n));
+    }
+  };
+
+  const handleNameChange = (val) => {
+    setEditingName(val);
+    const cleaned = val.trim();
+    const isDuplicate = nodes.some(n => n.id !== selectedNodeId && n.name.toLowerCase() === cleaned.toLowerCase());
+    if (isDuplicate) {
+      setNameError('Class name must be unique');
+    } else if (cleaned === '') {
+      setNameError('Class name cannot be empty');
+    } else {
+      setNameError('');
+      // commit immediately to node name list
+      setNodes(nodes.map(n => n.id === selectedNodeId ? { ...n, name: val } : n));
+    }
   };
 
   const updateNodeCoords = (nodeId, x, y) => {
@@ -682,37 +913,58 @@ export default function App() {
   // Render variables
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
   const selectedConnection = connections.find(c => c.id === selectedConnectionId);
+  const selectedDef = selectedNode ? elementDef(selectedNode.type) : null;
+  const SelectedTypeIcon = selectedNode ? (TYPE_ICONS[selectedNode.type] || Box) : Box;
 
   return (
     <div className="app-container">
       {/* Top Toolbar */}
       <div className="toolbar">
         <div className="toolbar-group">
-          <div className="toolbar-title">
-            <Layers size={18} strokeWidth={2} />
-            SilverGravity UML
-          </div>
-          <button className="btn-text" onClick={handleNewProject} title="New Diagram">
-            <File size={16} /> New
+          <button className="btn-icon" onClick={handleNewProject} title="New Diagram">
+            <File size={16} />
           </button>
-          <button className="btn-text" onClick={handleOpen} title="Open File (Cmd+O)">
-            <FolderOpen size={16} /> Open
+          <button className="btn-icon" onClick={handleOpen} title="Open File (Cmd+O)">
+            <FolderOpen size={16} />
           </button>
-          <button className="btn-text" onClick={handleSave} title="Save File (Cmd+S)">
-            <Save size={16} /> Save
+          <button className="btn-icon" onClick={handleSave} title="Save File (Cmd+S)">
+            <Save size={16} />
           </button>
-          <button className="btn-text" onClick={handleSaveAs} title="Save File As">
-            Save As
+          <button className="btn-icon" onClick={handleSaveAs} title="Save File As">
+            <Download size={16} />
           </button>
         </div>
 
         <div className="toolbar-group">
-          <button className="btn-text btn-accent" onClick={addNewNode}>
+          <button className="btn-text btn-accent" onClick={() => addNode('class')}>
             <Plus size={16} /> Add Class
           </button>
-          <button className="btn-text" onClick={handleLoadComproTemplate} title="Load Multi-tier Scheduler Scenario">
-            <Sparkles size={16} /> Load Compro Schedule Template
-          </button>
+          
+          <select 
+            className="btn-text" 
+            style={{ background: 'transparent', border: '1px solid var(--border-normal)', padding: '0 var(--space-8)', cursor: 'pointer' }}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val === 'initial') {
+                setNodes(INITIAL_NODES);
+                setConnections(INITIAL_CONNECTIONS);
+                setFilePath('SimpleSample.uml');
+                setSelectedNodeId(null);
+                setSelectedConnectionId(null);
+              } else if (val === 'compro') {
+                handleLoadComproTemplate();
+              } else if (val === 'hospital') {
+                handleLoadHospitalTemplate();
+              }
+              e.target.value = ''; // Reset selection
+            }}
+            defaultValue=""
+          >
+            <option value="" disabled>Load Sample...</option>
+            <option value="initial">Simple Sample</option>
+            <option value="compro">Compro Schedule System</option>
+            <option value="hospital">Hospital Management System</option>
+          </select>
         </div>
 
         <div className="toolbar-group">
@@ -731,6 +983,27 @@ export default function App() {
 
       {/* Main Workspace split */}
       <div className="editor-layout">
+        {/* Left UML element palette */}
+        <div className="palette" role="toolbar" aria-label="UML elements">
+          <div className="palette-heading">UML</div>
+          {PALETTE_ITEMS.map((type) => {
+            const def = elementDef(type);
+            const Icon = TYPE_ICONS[type] || Box;
+            return (
+              <button
+                key={type}
+                className="palette-btn"
+                onClick={() => addNode(type)}
+                title={`Add ${def.label}`}
+                aria-label={`Add ${def.label}`}
+              >
+                <Icon size={20} strokeWidth={1.5} />
+                <span className="palette-btn-label">{def.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Canvas Panel */}
         <div 
           className="canvas-container" 
@@ -741,7 +1014,7 @@ export default function App() {
           onDoubleClick={(e) => {
             // Double click on canvas empty space spawns node
             if (e.target === canvasRef.current || e.target.tagName === 'rect') {
-              addNewNode();
+              addNode('class');
             }
           }}
         >
@@ -856,15 +1129,17 @@ export default function App() {
               )}
             </svg>
 
-            {/* Draggable Class Nodes */}
+            {/* Draggable UML Nodes */}
             {nodes.map((node) => {
               const isSelected = selectedNodeId === node.id;
-              
+              const def = elementDef(node.type);
+              const TypeIcon = TYPE_ICONS[node.type] || Box;
+
               return (
                 <div
                   key={node.id}
                   ref={(el) => { nodeRefs.current[node.id] = el; }}
-                  className={`uml-node ${isSelected ? 'selected' : ''}`}
+                  className={`uml-node uml-node--${node.type || 'class'} ${isSelected ? 'selected' : ''}`}
                   style={{
                     left: `${node.x}px`,
                     top: `${node.y}px`,
@@ -925,39 +1200,60 @@ export default function App() {
                     />
                   ))}
 
-                  {/* Header Class name */}
+                  {/* Header: stereotype + element name */}
                   <div className="uml-node-header">
-                    <Box size={14} strokeWidth={2} />
-                    {node.name}
+                    <button 
+                      className="node-delete-btn" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Delete ${def.label} ${node.name}?`)) {
+                          deleteNode(node.id);
+                        }
+                      }}
+                      title={`Delete ${def.label}`}
+                    >
+                      <Trash2 size={13} strokeWidth={1.5} />
+                    </button>
+                    {def.stereotype && (
+                      <span className="uml-stereotype">«{def.stereotype}»</span>
+                    )}
+                    <span className={`uml-node-name-row ${def.italicName ? 'is-italic' : ''}`}>
+                      <TypeIcon size={13} strokeWidth={1.5} style={{ opacity: 0.7 }} />
+                      <span>{node.name}</span>
+                    </span>
                   </div>
 
-                  {/* Attributes area */}
+                  {/* Attributes / enum-literals area */}
                   <div className="uml-node-section">
                     {node.attributes.length === 0 && (
                       <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                        No attributes
+                        {def.isEnum ? 'No values' : 'No attributes'}
                       </span>
                     )}
                     {node.attributes.map((attr) => (
                       <div key={attr.id} className="uml-node-item">
-                        {attr.visibility} {attr.name}: {attr.type}
+                        {def.isEnum
+                          ? attr.name
+                          : `${attr.visibility} ${attr.name}: ${attr.type}`}
                       </div>
                     ))}
                   </div>
 
-                  {/* Methods area */}
-                  <div className="uml-node-section">
-                    {node.methods.length === 0 && (
-                      <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                        No methods
-                      </span>
-                    )}
-                    {node.methods.map((meth) => (
-                      <div key={meth.id} className="uml-node-item">
-                        {meth.visibility} {meth.name}({meth.parameters}): {meth.returnType}
-                      </div>
-                    ))}
-                  </div>
+                  {/* Methods area (hidden for enumerations) */}
+                  {def.hasMethods && (
+                    <div className="uml-node-section">
+                      {node.methods.length === 0 && (
+                        <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                          No methods
+                        </span>
+                      )}
+                      {node.methods.map((meth) => (
+                        <div key={meth.id} className="uml-node-item">
+                          {meth.visibility} {meth.name}({meth.parameters}): {meth.returnType}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -969,15 +1265,33 @@ export default function App() {
           {/* Section: Properties */}
           {selectedNode ? (
             <div className="sidebar-section">
-              <div className="sidebar-title"><Box size={16} strokeWidth={2} /> Edit Class</div>
-              
+              <div className="sidebar-title"><SelectedTypeIcon size={16} strokeWidth={2} /> Edit {selectedDef.label}</div>
+
               <div className="property-group">
-                <label className="property-label">Class Name</label>
+                <label className="property-label">Element Type</label>
+                <select
+                  value={selectedNode.type || 'class'}
+                  onChange={(e) => updateNodeType(selectedNode.id, e.target.value)}
+                >
+                  {PALETTE_ITEMS.map((t) => (
+                    <option key={t} value={t}>{elementDef(t).label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="property-group">
+                <label className="property-label">{selectedDef.label} Name</label>
                 <input
                   type="text"
-                  value={selectedNode.name}
-                  onChange={(e) => updateNodeName(selectedNode.id, e.target.value)}
+                  value={editingName}
+                  style={nameError ? { border: '1px solid #ef4444' } : {}}
+                  onChange={(e) => handleNameChange(e.target.value)}
                 />
+                {nameError && (
+                  <span style={{ color: '#ef4444', fontSize: '10px', fontWeight: 'bold', marginTop: '4px' }}>
+                    {nameError}
+                  </span>
+                )}
               </div>
 
               <div className="property-group">
@@ -1006,10 +1320,10 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Attributes Section */}
+              {/* Attributes / Enum values Section */}
               <div className="property-group" style={{ marginTop: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="property-label">Attributes</label>
+                  <label className="property-label">{selectedDef.isEnum ? 'Values' : 'Attributes'}</label>
                   <button className="btn-small" onClick={() => addAttribute(selectedNode.id)}>
                     + Add
                   </button>
@@ -1018,29 +1332,33 @@ export default function App() {
                 <div className="item-list">
                   {selectedNode.attributes.map((attr) => (
                     <div key={attr.id} className="item-list-row">
-                      <select
-                        style={{ width: '40px' }}
-                        value={attr.visibility}
-                        onChange={(e) => updateAttribute(selectedNode.id, attr.id, { visibility: e.target.value })}
-                      >
-                        <option value="+">+</option>
-                        <option value="-">-</option>
-                        <option value="#">#</option>
-                        <option value="~">~</option>
-                      </select>
+                      {!selectedDef.isEnum && (
+                        <select
+                          style={{ width: '40px' }}
+                          value={attr.visibility}
+                          onChange={(e) => updateAttribute(selectedNode.id, attr.id, { visibility: e.target.value })}
+                        >
+                          <option value="+">+</option>
+                          <option value="-">-</option>
+                          <option value="#">#</option>
+                          <option value="~">~</option>
+                        </select>
+                      )}
                       <input
                         type="text"
-                        placeholder="name"
+                        placeholder={selectedDef.isEnum ? 'VALUE' : 'name'}
                         value={attr.name}
                         onChange={(e) => updateAttribute(selectedNode.id, attr.id, { name: e.target.value })}
                       />
-                      <input
-                        type="text"
-                        placeholder="type"
-                        style={{ width: '70px' }}
-                        value={attr.type}
-                        onChange={(e) => updateAttribute(selectedNode.id, attr.id, { type: e.target.value })}
-                      />
+                      {!selectedDef.isEnum && (
+                        <input
+                          type="text"
+                          placeholder="type"
+                          style={{ width: '70px' }}
+                          value={attr.type}
+                          onChange={(e) => updateAttribute(selectedNode.id, attr.id, { type: e.target.value })}
+                        />
+                      )}
                       <button 
                         className="btn-danger btn-small" 
                         style={{ padding: '0 8px', height: '28px' }}
@@ -1053,7 +1371,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Methods Section */}
+              {/* Methods Section (hidden for enumerations) */}
+              {selectedDef.hasMethods && (
               <div className="property-group" style={{ marginTop: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label className="property-label">Methods</label>
@@ -1109,15 +1428,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
-
-              {/* Node deletion */}
-              <button 
-                className="btn-danger" 
-                style={{ width: '100%', marginTop: '32px', gap: '8px' }}
-                onClick={() => deleteNode(selectedNode.id)}
-              >
-                <Trash2 size={16} /> Delete Class Node
-              </button>
+              )}
             </div>
           ) : selectedConnection ? (
             <div className="sidebar-section">
