@@ -64,14 +64,12 @@ button:active, .btn-text:active, .btn-icon:active {
   gap: var(--space-8);
 }
 
-/* Accent border highlights */
+/* Accent highlights (borderless) */
 .btn-accent {
   color: var(--text-accent) !important;
-  border: 1px solid var(--border-normal) !important;
 }
 .btn-accent:hover {
   color: var(--text-primary) !important;
-  border-color: var(--border-focus) !important;
 }
 
 .zoom-indicator {
@@ -83,58 +81,39 @@ button:active, .btn-text:active, .btn-icon:active {
   margin-right: var(--space-4);
 }
 
-/* Left UML element palette rail */
+/* Left UML element palette rail (slim, icon-only) */
 .palette {
-  width: 78px;
+  width: 44px;
   flex-shrink: 0;
   background-color: var(--bg-panel);
   border-right: 1px solid var(--border-normal);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   gap: var(--space-4);
-  padding: var(--space-8) var(--space-8) var(--space-16);
+  padding: var(--space-8) var(--space-4);
   overflow-y: auto;
   z-index: 8;
 }
 
-.palette-heading {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  text-align: center;
-  padding: var(--space-4) 0 var(--space-8);
-}
-
 .palette-btn {
   display: flex !important;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
-  padding: var(--space-8) var(--space-4) !important;
-  border: 1px solid transparent !important;
+  width: 34px;
+  height: 34px;
+  padding: 0 !important;
+  border: none !important;
   color: var(--text-secondary) !important;
-  text-align: center;
 }
 
 .palette-btn:hover {
   color: var(--text-primary) !important;
   background-color: var(--bg-hover) !important;
-  border-color: var(--border-normal) !important;
 }
 
 .palette-btn:hover svg {
   color: var(--text-accent);
-}
-
-.palette-btn-label {
-  font-size: 9.5px;
-  line-height: 1.2;
-  font-weight: 500;
-  letter-spacing: 0.2px;
 }
 
 /* Layout Split */
@@ -309,6 +288,167 @@ button:active, .btn-text:active, .btn-icon:active {
 .node-delete-btn:hover {
   opacity: 1 !important;
   color: #ef4444 !important;
+}
+
+/* ---- Special UML shapes: note / actor / use-case ---- */
+
+/* Note: folded-corner comment on an amber-tinted card */
+.uml-node--note {
+  min-width: 150px;
+  max-width: 280px;
+  background-color: var(--accent-soft);
+}
+
+.uml-node--note::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 16px 16px 0;
+  border-color: transparent var(--bg-app) transparent transparent;
+}
+
+.uml-note {
+  position: relative;
+  padding: var(--space-16) var(--space-12) var(--space-12);
+  min-height: 40px;
+}
+
+.uml-note-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Actor: stick figure, no box chrome */
+.uml-node--actor {
+  min-width: 0 !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.uml-node--actor.selected {
+  border: none !important;
+  outline: 1px dashed var(--border-focus);
+  outline-offset: 4px;
+}
+
+.uml-actor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-8) var(--space-12);
+}
+
+.uml-actor-figure {
+  display: block;
+}
+
+.uml-actor-figure circle,
+.uml-actor-figure line {
+  stroke: var(--text-primary);
+  stroke-width: 2;
+  fill: none;
+  stroke-linecap: round;
+}
+
+.uml-actor-name {
+  margin-top: var(--space-4);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* Use case: ellipse */
+.uml-node--usecase {
+  min-width: 130px;
+  border-radius: 50% !important;
+  background-color: var(--bg-element);
+}
+
+.uml-usecase {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-16) var(--space-24);
+  min-height: 72px;
+}
+
+.uml-usecase-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ---- Toolbar sample dropdown menu ---- */
+.toolbar-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  background-color: var(--bg-panel);
+  border: 1px solid var(--border-normal);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4);
+}
+
+.dropdown-heading {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: var(--space-8) var(--space-8) var(--space-4);
+}
+
+.dropdown-item {
+  justify-content: flex-start !important;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--space-8) !important;
+  font-size: 12px;
+  color: var(--text-secondary) !important;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background-color: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Note text editor in sidebar */
+.note-text-input {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: var(--space-8);
+  background-color: var(--bg-element);
+  border: 1px solid var(--border-normal);
+  color: var(--text-primary);
 }
 
 /* Connection Ports - Tiny square shapes aligned precisely on the node border */

@@ -4,7 +4,6 @@ import {
   FolderOpen, 
   Save, 
   Download,
-  Plus, 
   ZoomIn, 
   ZoomOut, 
   Maximize2, 
@@ -19,22 +18,34 @@ import {
   Link2,
   Puzzle,
   Shapes,
-  List
+  List,
+  StickyNote,
+  User,
+  Circle,
+  Wand2
 } from 'lucide-react';
 import './App.css';
 
-// UML element type registry (class-family). Each node stores a `type`;
-// an undefined type is treated as 'class' for backward compatibility.
+// UML element type registry. Each node stores a `type`; an undefined type is
+// treated as 'class' for backward compatibility. `shape` drives rendering:
+//   'class'   -> 3-compartment box (class / interface / abstract / enumeration)
+//   'note'    -> folded-corner comment
+//   'actor'   -> stick figure (use-case diagrams)
+//   'usecase' -> ellipse
 const TYPE_ICONS = {
   class: Box,
   interface: Puzzle,
   abstract: Shapes,
-  enumeration: List
+  enumeration: List,
+  note: StickyNote,
+  actor: User,
+  usecase: Circle
 };
 
 const UML_ELEMENTS = {
   class: {
     label: 'Class',
+    shape: 'class',
     stereotype: null,
     italicName: false,
     hasMethods: true,
@@ -46,6 +57,7 @@ const UML_ELEMENTS = {
   },
   interface: {
     label: 'Interface',
+    shape: 'class',
     stereotype: 'interface',
     italicName: true,
     hasMethods: true,
@@ -57,6 +69,7 @@ const UML_ELEMENTS = {
   },
   abstract: {
     label: 'Abstract Class',
+    shape: 'class',
     stereotype: 'abstract',
     italicName: true,
     hasMethods: true,
@@ -68,6 +81,7 @@ const UML_ELEMENTS = {
   },
   enumeration: {
     label: 'Enumeration',
+    shape: 'class',
     stereotype: 'enumeration',
     italicName: false,
     hasMethods: false,
@@ -79,6 +93,33 @@ const UML_ELEMENTS = {
       ],
       methods: []
     })
+  },
+  note: {
+    label: 'Note',
+    shape: 'note',
+    stereotype: null,
+    italicName: false,
+    hasMethods: false,
+    isEnum: false,
+    seed: () => ({ attributes: [], methods: [], text: 'Note…' })
+  },
+  actor: {
+    label: 'Actor',
+    shape: 'actor',
+    stereotype: null,
+    italicName: false,
+    hasMethods: false,
+    isEnum: false,
+    seed: () => ({ attributes: [], methods: [] })
+  },
+  usecase: {
+    label: 'Use Case',
+    shape: 'usecase',
+    stereotype: null,
+    italicName: false,
+    hasMethods: false,
+    isEnum: false,
+    seed: () => ({ attributes: [], methods: [] })
   }
 };
 
@@ -86,7 +127,23 @@ const UML_ELEMENTS = {
 const elementDef = (type) => UML_ELEMENTS[type] || UML_ELEMENTS.class;
 
 // Ordered palette entries rendered in the left rail.
-const PALETTE_ITEMS = ['class', 'interface', 'abstract', 'enumeration'];
+const PALETTE_ITEMS = ['class', 'interface', 'abstract', 'enumeration', 'note', 'actor', 'usecase'];
+
+// Hover-reveal delete control shared by every node shape.
+const NodeDeleteButton = ({ label, name, onDelete }) => (
+  <button
+    className="node-delete-btn"
+    onClick={(e) => {
+      e.stopPropagation();
+      if (window.confirm(`Delete ${label} ${name}?`)) {
+        onDelete();
+      }
+    }}
+    title={`Delete ${label}`}
+  >
+    <Trash2 size={13} strokeWidth={1.5} />
+  </button>
+);
 
 // Help helper component for shortcuts list
 const ShortcutHelp = () => (
@@ -443,6 +500,9 @@ export default function App() {
   const [editingName, setEditingName] = useState('');
   const [nameError, setNameError] = useState('');
 
+  // Load-sample dropdown menu visibility
+  const [sampleMenuOpen, setSampleMenuOpen] = useState(false);
+
   // Sync input name when selection changes
   useEffect(() => {
     if (selectedNode) {
@@ -622,6 +682,22 @@ export default function App() {
     setPanY(50);
   };
 
+  // Load a bundled sample diagram, then close the sample menu.
+  const loadSample = (val) => {
+    if (val === 'initial') {
+      setNodes(INITIAL_NODES);
+      setConnections(INITIAL_CONNECTIONS);
+      setFilePath('SimpleSample.uml');
+      setSelectedNodeId(null);
+      setSelectedConnectionId(null);
+    } else if (val === 'compro') {
+      handleLoadComproTemplate();
+    } else if (val === 'hospital') {
+      handleLoadHospitalTemplate();
+    }
+    setSampleMenuOpen(false);
+  };
+
   // Node operations
   const addNode = (type = 'class') => {
     const def = elementDef(type);
@@ -648,7 +724,8 @@ export default function App() {
       x,
       y,
       attributes: seed.attributes,
-      methods: seed.methods
+      methods: seed.methods,
+      text: seed.text || ''
     };
 
     setNodes([...nodes, newNode]);
@@ -664,16 +741,23 @@ export default function App() {
     }
   };
 
-  // Convert an existing element to another UML type. Enumerations drop
-  // their methods, since enums have no operations.
+  // Convert an existing element to another UML type. Compartments that the
+  // target shape does not use are cleared, and notes get seeded body text.
   const updateNodeType = (nodeId, newType) => {
     const def = elementDef(newType);
     setNodes(nodes.map(n => {
       if (n.id !== nodeId) return n;
       const next = { ...n, type: newType };
       if (!def.hasMethods) next.methods = [];
+      if (def.shape !== 'class') next.attributes = [];
+      if (def.shape === 'note' && !next.text) next.text = 'Note…';
       return next;
     }));
+  };
+
+  // Update a note's body text.
+  const updateNodeText = (nodeId, text) => {
+    setNodes(nodes.map(n => n.id === nodeId ? { ...n, text } : n));
   };
 
   const updateNodeName = (nodeId, newName) => {
@@ -933,38 +1017,35 @@ export default function App() {
           <button className="btn-icon" onClick={handleSaveAs} title="Save File As">
             <Download size={16} />
           </button>
-        </div>
 
-        <div className="toolbar-group">
-          <button className="btn-text btn-accent" onClick={() => addNode('class')}>
-            <Plus size={16} /> Add Class
-          </button>
-          
-          <select 
-            className="btn-text" 
-            style={{ background: 'transparent', border: '1px solid var(--border-normal)', padding: '0 var(--space-8)', cursor: 'pointer' }}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === 'initial') {
-                setNodes(INITIAL_NODES);
-                setConnections(INITIAL_CONNECTIONS);
-                setFilePath('SimpleSample.uml');
-                setSelectedNodeId(null);
-                setSelectedConnectionId(null);
-              } else if (val === 'compro') {
-                handleLoadComproTemplate();
-              } else if (val === 'hospital') {
-                handleLoadHospitalTemplate();
-              }
-              e.target.value = ''; // Reset selection
-            }}
-            defaultValue=""
-          >
-            <option value="" disabled>Load Sample...</option>
-            <option value="initial">Simple Sample</option>
-            <option value="compro">Compro Schedule System</option>
-            <option value="hospital">Hospital Management System</option>
-          </select>
+          <div className="toolbar-menu">
+            <button
+              className="btn-icon"
+              onClick={() => setSampleMenuOpen((o) => !o)}
+              title="Load Sample Diagram"
+              aria-haspopup="menu"
+              aria-expanded={sampleMenuOpen}
+            >
+              <Wand2 size={16} />
+            </button>
+            {sampleMenuOpen && (
+              <>
+                <div className="menu-backdrop" onClick={() => setSampleMenuOpen(false)} />
+                <div className="dropdown-menu" role="menu">
+                  <div className="dropdown-heading">Load Sample</div>
+                  <button className="dropdown-item" role="menuitem" onClick={() => loadSample('initial')}>
+                    Simple Sample
+                  </button>
+                  <button className="dropdown-item" role="menuitem" onClick={() => loadSample('compro')}>
+                    Compro Schedule System
+                  </button>
+                  <button className="dropdown-item" role="menuitem" onClick={() => loadSample('hospital')}>
+                    Hospital Management System
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="toolbar-group">
@@ -985,7 +1066,6 @@ export default function App() {
       <div className="editor-layout">
         {/* Left UML element palette */}
         <div className="palette" role="toolbar" aria-label="UML elements">
-          <div className="palette-heading">UML</div>
           {PALETTE_ITEMS.map((type) => {
             const def = elementDef(type);
             const Icon = TYPE_ICONS[type] || Box;
@@ -998,7 +1078,6 @@ export default function App() {
                 aria-label={`Add ${def.label}`}
               >
                 <Icon size={20} strokeWidth={1.5} />
-                <span className="palette-btn-label">{def.label}</span>
               </button>
             );
           })}
@@ -1200,58 +1279,73 @@ export default function App() {
                     />
                   ))}
 
-                  {/* Header: stereotype + element name */}
-                  <div className="uml-node-header">
-                    <button 
-                      className="node-delete-btn" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`Delete ${def.label} ${node.name}?`)) {
-                          deleteNode(node.id);
-                        }
-                      }}
-                      title={`Delete ${def.label}`}
-                    >
-                      <Trash2 size={13} strokeWidth={1.5} />
-                    </button>
-                    {def.stereotype && (
-                      <span className="uml-stereotype">«{def.stereotype}»</span>
-                    )}
-                    <span className={`uml-node-name-row ${def.italicName ? 'is-italic' : ''}`}>
-                      <TypeIcon size={13} strokeWidth={1.5} style={{ opacity: 0.7 }} />
-                      <span>{node.name}</span>
-                    </span>
-                  </div>
-
-                  {/* Attributes / enum-literals area */}
-                  <div className="uml-node-section">
-                    {node.attributes.length === 0 && (
-                      <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                        {def.isEnum ? 'No values' : 'No attributes'}
-                      </span>
-                    )}
-                    {node.attributes.map((attr) => (
-                      <div key={attr.id} className="uml-node-item">
-                        {def.isEnum
-                          ? attr.name
-                          : `${attr.visibility} ${attr.name}: ${attr.type}`}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Methods area (hidden for enumerations) */}
-                  {def.hasMethods && (
-                    <div className="uml-node-section">
-                      {node.methods.length === 0 && (
-                        <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
-                          No methods
+                  {def.shape === 'class' ? (
+                    <>
+                      {/* Header: stereotype + element name */}
+                      <div className="uml-node-header">
+                        <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
+                        {def.stereotype && (
+                          <span className="uml-stereotype">«{def.stereotype}»</span>
+                        )}
+                        <span className={`uml-node-name-row ${def.italicName ? 'is-italic' : ''}`}>
+                          <TypeIcon size={13} strokeWidth={1.5} style={{ opacity: 0.7 }} />
+                          <span>{node.name}</span>
                         </span>
-                      )}
-                      {node.methods.map((meth) => (
-                        <div key={meth.id} className="uml-node-item">
-                          {meth.visibility} {meth.name}({meth.parameters}): {meth.returnType}
+                      </div>
+
+                      {/* Attributes / enum-literals area */}
+                      <div className="uml-node-section">
+                        {node.attributes.length === 0 && (
+                          <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                            {def.isEnum ? 'No values' : 'No attributes'}
+                          </span>
+                        )}
+                        {node.attributes.map((attr) => (
+                          <div key={attr.id} className="uml-node-item">
+                            {def.isEnum
+                              ? attr.name
+                              : `${attr.visibility} ${attr.name}: ${attr.type}`}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Methods area (hidden for enumerations) */}
+                      {def.hasMethods && (
+                        <div className="uml-node-section">
+                          {node.methods.length === 0 && (
+                            <span className="uml-node-item" style={{ color: 'var(--text-dim)', fontStyle: 'italic' }}>
+                              No methods
+                            </span>
+                          )}
+                          {node.methods.map((meth) => (
+                            <div key={meth.id} className="uml-node-item">
+                              {meth.visibility} {meth.name}({meth.parameters}): {meth.returnType}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+                    </>
+                  ) : def.shape === 'note' ? (
+                    <div className="uml-note">
+                      <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
+                      <div className="uml-note-text">{node.text || 'Note…'}</div>
+                    </div>
+                  ) : def.shape === 'actor' ? (
+                    <div className="uml-actor">
+                      <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
+                      <svg className="uml-actor-figure" viewBox="0 0 40 64" width="40" height="64" aria-hidden="true">
+                        <circle cx="20" cy="9" r="8" />
+                        <line x1="20" y1="17" x2="20" y2="42" />
+                        <line x1="4" y1="26" x2="36" y2="26" />
+                        <line x1="20" y1="42" x2="6" y2="62" />
+                        <line x1="20" y1="42" x2="34" y2="62" />
+                      </svg>
+                      <div className="uml-actor-name">{node.name}</div>
+                    </div>
+                  ) : (
+                    <div className="uml-usecase">
+                      <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
+                      <span className="uml-usecase-name">{node.name}</span>
                     </div>
                   )}
                 </div>
@@ -1294,6 +1388,19 @@ export default function App() {
                 )}
               </div>
 
+              {selectedDef.shape === 'note' && (
+                <div className="property-group">
+                  <label className="property-label">Note Text</label>
+                  <textarea
+                    className="note-text-input"
+                    rows={4}
+                    value={selectedNode.text || ''}
+                    onChange={(e) => updateNodeText(selectedNode.id, e.target.value)}
+                    placeholder="Enter note text…"
+                  />
+                </div>
+              )}
+
               <div className="property-group">
                 <div className="property-row">
                   <div style={{ flex: 1 }}>
@@ -1320,7 +1427,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Attributes / Enum values Section */}
+              {/* Attributes / Enum values Section (class-family only) */}
+              {selectedDef.shape === 'class' && (
               <div className="property-group" style={{ marginTop: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <label className="property-label">{selectedDef.isEnum ? 'Values' : 'Attributes'}</label>
@@ -1370,6 +1478,7 @@ export default function App() {
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Methods Section (hidden for enumerations) */}
               {selectedDef.hasMethods && (
