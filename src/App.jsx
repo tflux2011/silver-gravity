@@ -18,7 +18,8 @@ import {
   Undo2,
   Redo2,
   ArrowLeftRight,
-  PanelLeftClose
+  Settings,
+  UserCircle
 } from 'lucide-react';
 import { TYPE_ICONS, elementDef, PALETTE_ITEMS } from './model/umlElements';
 import {
@@ -49,14 +50,6 @@ const multiplicityOptionsFor = (current) => {
   const extra = !known && current ? [{ value: current, label: `${current}  (custom)` }] : [];
   return [...extra, ...MULTIPLICITY_OPTIONS];
 };
-
-// Left-rail palette organized into semantic sections so related elements are
-// grouped rather than living in one flat, standalone strip.
-const PALETTE_GROUPS = [
-  { label: 'Structure', items: ['class', 'interface', 'abstract', 'enumeration'] },
-  { label: 'Behavior', items: ['actor', 'usecase'] },
-  { label: 'Annotation', items: ['note'] }
-];
 
 export default function App() {
   // Single undoable document. Transient UI state (selection, drag, pan) is
@@ -111,9 +104,6 @@ export default function App() {
 
   // Load-sample dropdown menu visibility
   const [sampleMenuOpen, setSampleMenuOpen] = useState(false);
-
-  // Left palette rail: collapsed (icons only, labels on hover) vs expanded.
-  const [paletteExpanded, setPaletteExpanded] = useState(false);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const selectedConnection = connections.find((c) => c.id === selectedConnectionId);
@@ -602,152 +592,126 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Top Toolbar */}
-      <div className="toolbar">
-        <div className="toolbar-group">
-          <button className="btn-icon" onClick={handleNewProject} title="New Diagram">
-            <File size={16} />
+      {/* VS Code-style Activity Bar (left, full height) */}
+      <nav className="activity-bar" aria-label="UML elements">
+        <div className="activity-bar-top">
+          {PALETTE_ITEMS.map((type) => {
+            const def = elementDef(type);
+            const Icon = TYPE_ICONS[type] || Box;
+            return (
+              <button
+                key={type}
+                className="activity-btn"
+                onClick={() => addNode(type)}
+                title={`Add ${def.label}`}
+                aria-label={`Add ${def.label}`}
+              >
+                <Icon size={24} strokeWidth={1.5} />
+              </button>
+            );
+          })}
+        </div>
+        <div className="activity-bar-bottom">
+          <button className="activity-btn" title="Settings" aria-label="Settings">
+            <Settings size={24} strokeWidth={1.5} />
           </button>
-          <button className="btn-icon" onClick={handleOpen} title="Open File (Cmd+O)">
-            <FolderOpen size={16} />
+          <button className="activity-btn" title="Account" aria-label="Account">
+            <UserCircle size={24} strokeWidth={1.5} />
           </button>
-          <button className="btn-icon" onClick={handleSave} title="Save File (Cmd+S)">
-            <Save size={16} />
-          </button>
-          <button className="btn-icon" onClick={handleSaveAs} title="Save File As">
-            <Download size={16} />
-          </button>
+        </div>
+      </nav>
 
-          <div className="toolbar-menu">
+      {/* Right side: toolbar on top, then workspace below */}
+      <div className="main-column">
+        {/* Top Toolbar */}
+        <div className="toolbar">
+          <div className="toolbar-group">
+            <button className="btn-icon" onClick={handleNewProject} title="New Diagram">
+              <File size={16} />
+            </button>
+            <button className="btn-icon" onClick={handleOpen} title="Open File (Cmd+O)">
+              <FolderOpen size={16} />
+            </button>
+            <button className="btn-icon" onClick={handleSave} title="Save File (Cmd+S)">
+              <Save size={16} />
+            </button>
+            <button className="btn-icon" onClick={handleSaveAs} title="Save File As">
+              <Download size={16} />
+            </button>
+
+            <div className="toolbar-menu">
+              <button
+                className="btn-icon"
+                onClick={() => setSampleMenuOpen((o) => !o)}
+                title="Load Sample Diagram"
+                aria-haspopup="menu"
+                aria-expanded={sampleMenuOpen}
+              >
+                <Wand2 size={16} />
+              </button>
+              {sampleMenuOpen && (
+                <>
+                  <div className="menu-backdrop" onClick={() => setSampleMenuOpen(false)} />
+                  <div className="dropdown-menu" role="menu">
+                    <div className="dropdown-heading">Load Sample</div>
+                    <button className="dropdown-item" role="menuitem" onClick={() => loadSample('initial')}>
+                      Simple Sample
+                    </button>
+                    <button className="dropdown-item" role="menuitem" onClick={() => loadSample('compro')}>
+                      Compro Schedule System
+                    </button>
+                    <button className="dropdown-item" role="menuitem" onClick={() => loadSample('hospital')}>
+                      Hospital Management System
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="toolbar-group">
             <button
               className="btn-icon"
-              onClick={() => setSampleMenuOpen((o) => !o)}
-              title="Load Sample Diagram"
-              aria-haspopup="menu"
-              aria-expanded={sampleMenuOpen}
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Cmd+Z)"
+              style={!canUndo ? { opacity: 0.35, pointerEvents: 'none' } : undefined}
             >
-              <Wand2 size={16} />
-            </button>
-            {sampleMenuOpen && (
-              <>
-                <div className="menu-backdrop" onClick={() => setSampleMenuOpen(false)} />
-                <div className="dropdown-menu" role="menu">
-                  <div className="dropdown-heading">Load Sample</div>
-                  <button className="dropdown-item" role="menuitem" onClick={() => loadSample('initial')}>
-                    Simple Sample
-                  </button>
-                  <button className="dropdown-item" role="menuitem" onClick={() => loadSample('compro')}>
-                    Compro Schedule System
-                  </button>
-                  <button className="dropdown-item" role="menuitem" onClick={() => loadSample('hospital')}>
-                    Hospital Management System
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="toolbar-group">
-          <button
-            className="btn-icon"
-            onClick={undo}
-            disabled={!canUndo}
-            title="Undo (Cmd+Z)"
-            style={!canUndo ? { opacity: 0.35, pointerEvents: 'none' } : undefined}
-          >
-            <Undo2 size={16} />
-          </button>
-          <button
-            className="btn-icon"
-            onClick={redo}
-            disabled={!canRedo}
-            title="Redo (Cmd+Shift+Z)"
-            style={!canRedo ? { opacity: 0.35, pointerEvents: 'none' } : undefined}
-          >
-            <Redo2 size={16} />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Workspace split */}
-      <div className="editor-layout">
-        {/* Left UML element palette (grouped, collapsible) */}
-        <aside
-          className={`palette ${paletteExpanded ? 'palette--expanded' : ''}`}
-          aria-label="UML elements"
-          onMouseEnter={() => setPaletteExpanded(true)}
-          onMouseLeave={() => setPaletteExpanded(false)}
-        >
-          <button
-            className="palette-toggle"
-            onClick={() => setPaletteExpanded(false)}
-            title="Collapse panel"
-            aria-label="Collapse panel"
-          >
-            <PanelLeftClose size={16} />
-          </button>
-
-          <div className="palette-scroll">
-            {PALETTE_GROUPS.map((group) => (
-              <div key={group.label} className="palette-group" role="toolbar" aria-label={group.label}>
-                <div className="palette-group-label">{group.label}</div>
-                {group.items.map((type) => {
-                  const def = elementDef(type);
-                  const Icon = TYPE_ICONS[type] || Box;
-                  return (
-                    <button
-                      key={type}
-                      className="palette-btn"
-                      onClick={() => addNode(type)}
-                      title={`Add ${def.label}`}
-                      aria-label={`Add ${def.label}`}
-                    >
-                      <Icon size={20} strokeWidth={1.5} />
-                      <span className="palette-btn-label">{def.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-
-          <div className="palette-group palette-view" role="toolbar" aria-label="View controls">
-            <div className="palette-group-label">View</div>
-            <button
-              className="palette-btn"
-              onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
-              title="Zoom Out"
-              aria-label="Zoom out"
-            >
-              <ZoomOut size={20} strokeWidth={1.5} />
-              <span className="palette-btn-label">Zoom out</span>
-            </button>
-            <div className="palette-zoom-indicator">{Math.round(zoom * 100)}%</div>
-            <button
-              className="palette-btn"
-              onClick={() => setZoom(Math.min(2.0, zoom + 0.1))}
-              title="Zoom In"
-              aria-label="Zoom in"
-            >
-              <ZoomIn size={20} strokeWidth={1.5} />
-              <span className="palette-btn-label">Zoom in</span>
+              <Undo2 size={16} />
             </button>
             <button
-              className="palette-btn"
+              className="btn-icon"
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Cmd+Shift+Z)"
+              style={!canRedo ? { opacity: 0.35, pointerEvents: 'none' } : undefined}
+            >
+              <Redo2 size={16} />
+            </button>
+
+            <button className="btn-icon" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="Zoom Out">
+              <ZoomOut size={16} />
+            </button>
+            <div className="zoom-indicator">{Math.round(zoom * 100)}%</div>
+            <button className="btn-icon" onClick={() => setZoom(Math.min(2.0, zoom + 0.1))} title="Zoom In">
+              <ZoomIn size={16} />
+            </button>
+            <button
+              className="btn-icon"
               onClick={() => {
                 setZoom(1.0);
                 setPanX(100);
                 setPanY(80);
               }}
               title="Reset View"
-              aria-label="Reset view"
             >
-              <Maximize2 size={20} strokeWidth={1.5} />
-              <span className="palette-btn-label">Reset view</span>
+              <Maximize2 size={16} />
             </button>
           </div>
-        </aside>
+        </div>
+
+        {/* Workspace (canvas + right sidebar) */}
+        <div className="editor-layout">
 
         {/* Canvas Panel */}
         <div
@@ -1520,6 +1484,7 @@ export default function App() {
             </div>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

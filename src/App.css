@@ -1,12 +1,59 @@
-/* SilverGravity UML App Stylesheet - Minimalist CAD Aesthetic */
-
+/* App layout: Activity bar (full height left) + main column (toolbar + workspace) */
 .app-container {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   width: 100vw;
   height: 100vh;
   background-color: var(--bg-app);
   overflow: hidden;
+}
+
+/* VS Code-style Activity Bar — full-height left icon strip */
+.activity-bar {
+  width: 48px;
+  flex-shrink: 0;
+  background-color: var(--bg-panel);
+  border-right: 1px solid var(--border-normal);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-8) 0;
+  z-index: 12;
+}
+
+.activity-bar-top,
+.activity-bar-bottom {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.activity-btn {
+  width: 40px;
+  height: 40px;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-secondary) !important;
+}
+.activity-btn:hover {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-hover) !important;
+}
+.activity-btn:hover svg {
+  color: var(--text-accent);
+}
+
+/* Main column sits to the right of the activity bar */
+.main-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100vh;
 }
 
 /* Header Toolbar - Compact 48px layout */
@@ -81,148 +128,13 @@ button:active, .btn-text:active, .btn-icon:active {
   margin-right: var(--space-4);
 }
 
-/* Left UML element palette rail (grouped + collapsible) */
-.palette {
-  width: 52px;
-  flex-shrink: 0;
-  background-color: var(--bg-panel);
-  border-right: 1px solid var(--border-normal);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-4) var(--space-4);
-  overflow: visible;
-  z-index: 8;
-  transition: width 0.15s ease;
-}
-
-.palette--expanded {
-  width: 188px;
-  overflow-y: auto;
-}
-
-.palette-toggle {
-  width: 24px;
-  height: 24px;
-  align-self: flex-end;
-  color: var(--text-secondary) !important;
-  display: none;
-}
-.palette--expanded .palette-toggle {
-  display: flex;
-}
-
-.palette-scroll {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-8);
-  flex: 1;
-}
-
-.palette-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.palette-group + .palette-group,
-.palette-view {
-  border-top: 1px solid var(--border-dim);
-  padding-top: var(--space-8);
-}
-
-.palette-group-label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-  padding: 0 var(--space-4);
-  height: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.palette--expanded .palette-group-label {
-  height: auto;
-  opacity: 1;
-  margin-bottom: 2px;
-}
-
-.palette-btn {
-  position: relative;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-8);
-  width: 34px;
-  height: 34px;
-  padding: 0 !important;
-  border: none !important;
-  border-radius: 6px;
-  color: var(--text-secondary) !important;
-}
-.palette--expanded .palette-btn {
-  width: 100%;
-  justify-content: flex-start;
-  padding: 0 var(--space-8) !important;
-}
-
-.palette-btn:hover {
-  color: var(--text-primary) !important;
-  background-color: var(--bg-hover) !important;
-}
-.palette-btn:hover svg {
-  color: var(--text-accent);
-}
-
-.palette-btn-label {
-  font-size: 12px;
-  white-space: nowrap;
-  opacity: 0;
-  width: 0;
-  overflow: hidden;
-}
-.palette--expanded .palette-btn-label {
-  opacity: 1;
-  width: auto;
-}
-
-/* Collapsed rail: reveal the label as a floating chip on hover */
-.palette:not(.palette--expanded) .palette-btn:hover .palette-btn-label {
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  opacity: 1;
-  width: auto;
-  padding: 4px 8px;
-  background-color: var(--bg-element);
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-  color: var(--text-primary);
-  z-index: 30;
-  pointer-events: none;
-}
-
-.palette-zoom-indicator {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  text-align: center;
-  padding: 2px 0;
-}
-.palette--expanded .palette-zoom-indicator {
-  text-align: left;
-  padding-left: var(--space-8);
-}
-
 /* Layout Split */
 .editor-layout {
   display: flex;
   flex-direction: row;
   flex-grow: 1;
   width: 100%;
-  height: calc(100% - 48px);
+  height: 0;
   overflow: hidden;
 }
 
