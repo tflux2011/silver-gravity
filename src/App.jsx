@@ -16,7 +16,10 @@ import {
   Wand2,
   Box,
   Undo2,
-  Redo2
+  Redo2,
+  ArrowLeftRight,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { TYPE_ICONS, elementDef, PALETTE_ITEMS } from './model/umlElements';
 import {
@@ -47,6 +50,14 @@ const multiplicityOptionsFor = (current) => {
   const extra = !known && current ? [{ value: current, label: `${current}  (custom)` }] : [];
   return [...extra, ...MULTIPLICITY_OPTIONS];
 };
+
+// Left-rail palette organized into semantic sections so related elements are
+// grouped rather than living in one flat, standalone strip.
+const PALETTE_GROUPS = [
+  { label: 'Structure', items: ['class', 'interface', 'abstract', 'enumeration'] },
+  { label: 'Behavior', items: ['actor', 'usecase'] },
+  { label: 'Annotation', items: ['note'] }
+];
 
 export default function App() {
   // Single undoable document. Transient UI state (selection, drag, pan) is
@@ -101,6 +112,9 @@ export default function App() {
 
   // Load-sample dropdown menu visibility
   const [sampleMenuOpen, setSampleMenuOpen] = useState(false);
+
+  // Left palette rail: collapsed (icons only, labels on hover) vs expanded.
+  const [paletteExpanded, setPaletteExpanded] = useState(false);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
   const selectedConnection = connections.find((c) => c.id === selectedConnectionId);
@@ -499,6 +513,30 @@ export default function App() {
     setConnections(connections.map((c) => (c.id === connId ? { ...c, ...fields } : c)));
   };
 
+  // Flip a relationship's direction: swap source/target endpoints together with
+  // every paired end-property so arrowheads, roles and multiplicities follow.
+  const reverseConnection = (connId) => {
+    setConnections(
+      connections.map((c) =>
+        c.id === connId
+          ? {
+              ...c,
+              fromNodeId: c.toNodeId,
+              toNodeId: c.fromNodeId,
+              fromPort: c.toPort,
+              toPort: c.fromPort,
+              roleFrom: c.roleTo,
+              roleTo: c.roleFrom,
+              multiplicityFrom: c.multiplicityTo,
+              multiplicityTo: c.multiplicityFrom,
+              startArrow: c.endArrow,
+              endArrow: c.startArrow
+            }
+          : c
+      )
+    );
+  };
+
   // Canvas Drag Panning
   const handleCanvasMouseDown = (e) => {
     // If user clicked standard elements/ports, ignore canvas panning
@@ -630,48 +668,85 @@ export default function App() {
           >
             <Redo2 size={16} />
           </button>
-
-          <button className="btn-icon" onClick={() => setZoom(Math.max(0.5, zoom - 0.1))} title="Zoom Out">
-            <ZoomOut size={16} />
-          </button>
-          <div className="zoom-indicator">{Math.round(zoom * 100)}%</div>
-          <button className="btn-icon" onClick={() => setZoom(Math.min(2.0, zoom + 0.1))} title="Zoom In">
-            <ZoomIn size={16} />
-          </button>
-          <button
-            className="btn-icon"
-            onClick={() => {
-              setZoom(1.0);
-              setPanX(100);
-              setPanY(80);
-            }}
-            title="Reset View"
-          >
-            <Maximize2 size={16} />
-          </button>
         </div>
       </div>
 
       {/* Main Workspace split */}
       <div className="editor-layout">
-        {/* Left UML element palette */}
-        <div className="palette" role="toolbar" aria-label="UML elements">
-          {PALETTE_ITEMS.map((type) => {
-            const def = elementDef(type);
-            const Icon = TYPE_ICONS[type] || Box;
-            return (
-              <button
-                key={type}
-                className="palette-btn"
-                onClick={() => addNode(type)}
-                title={`Add ${def.label}`}
-                aria-label={`Add ${def.label}`}
-              >
-                <Icon size={20} strokeWidth={1.5} />
-              </button>
-            );
-          })}
-        </div>
+        {/* Left UML element palette (grouped, collapsible) */}
+        <aside
+          className={`palette ${paletteExpanded ? 'palette--expanded' : ''}`}
+          aria-label="UML elements"
+        >
+          <button
+            className="palette-toggle"
+            onClick={() => setPaletteExpanded((o) => !o)}
+            title={paletteExpanded ? 'Collapse panel' : 'Expand panel'}
+            aria-label={paletteExpanded ? 'Collapse panel' : 'Expand panel'}
+          >
+            {paletteExpanded ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+          </button>
+
+          <div className="palette-scroll">
+            {PALETTE_GROUPS.map((group) => (
+              <div key={group.label} className="palette-group" role="toolbar" aria-label={group.label}>
+                <div className="palette-group-label">{group.label}</div>
+                {group.items.map((type) => {
+                  const def = elementDef(type);
+                  const Icon = TYPE_ICONS[type] || Box;
+                  return (
+                    <button
+                      key={type}
+                      className="palette-btn"
+                      onClick={() => addNode(type)}
+                      title={`Add ${def.label}`}
+                      aria-label={`Add ${def.label}`}
+                    >
+                      <Icon size={20} strokeWidth={1.5} />
+                      <span className="palette-btn-label">{def.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          <div className="palette-group palette-view" role="toolbar" aria-label="View controls">
+            <div className="palette-group-label">View</div>
+            <button
+              className="palette-btn"
+              onClick={() => setZoom(Math.max(0.5, zoom - 0.1))}
+              title="Zoom Out"
+              aria-label="Zoom out"
+            >
+              <ZoomOut size={20} strokeWidth={1.5} />
+              <span className="palette-btn-label">Zoom out</span>
+            </button>
+            <div className="palette-zoom-indicator">{Math.round(zoom * 100)}%</div>
+            <button
+              className="palette-btn"
+              onClick={() => setZoom(Math.min(2.0, zoom + 0.1))}
+              title="Zoom In"
+              aria-label="Zoom in"
+            >
+              <ZoomIn size={20} strokeWidth={1.5} />
+              <span className="palette-btn-label">Zoom in</span>
+            </button>
+            <button
+              className="palette-btn"
+              onClick={() => {
+                setZoom(1.0);
+                setPanX(100);
+                setPanY(80);
+              }}
+              title="Reset View"
+              aria-label="Reset view"
+            >
+              <Maximize2 size={20} strokeWidth={1.5} />
+              <span className="palette-btn-label">Reset view</span>
+            </button>
+          </div>
+        </aside>
 
         {/* Canvas Panel */}
         <div
@@ -1163,7 +1238,7 @@ export default function App() {
 
                   <div className="item-list">
                     {selectedNode.methods.map((meth) => (
-                      <div key={meth.id} className="item-list-row" style={{ flexWrap: 'wrap', gap: '4px' }}>
+                      <div key={meth.id} className="item-block" style={{ gap: '4px' }}>
                         <div style={{ display: 'flex', width: '100%', gap: '4px' }}>
                           <select
                             style={{ width: '40px' }}
@@ -1252,6 +1327,16 @@ export default function App() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="property-group">
+                <button
+                  className="btn-line"
+                  onClick={() => reverseConnection(selectedConnection.id)}
+                  title="Swap the source and target ends of this relationship"
+                >
+                  <ArrowLeftRight size={14} /> Reverse direction
+                </button>
               </div>
 
               <div className="property-group">
