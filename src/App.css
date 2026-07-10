@@ -33,6 +33,7 @@
 .activity-btn {
   width: 44px;
   height: 44px;
+  padding: 0 !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
