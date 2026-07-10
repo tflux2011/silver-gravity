@@ -68,6 +68,17 @@ export const NAVIGABILITY_OPTIONS = [
   { value: 'cross', label: 'Not navigable (x)' }
 ];
 
+// Standard UML association-end multiplicities. `value` is the stored/rendered
+// token; `label` adds a short plain-language hint in the selector.
+export const MULTIPLICITY_OPTIONS = [
+  { value: '', label: '(unspecified)' },
+  { value: '0..1', label: '0..1  (optional one)' },
+  { value: '1', label: '1  (exactly one)' },
+  { value: '0..*', label: '0..*  (zero or more)' },
+  { value: '1..*', label: '1..*  (one or more)' },
+  { value: '*', label: '*  (many)' }
+];
+
 // Map a navigability option to a marker id (or null for no marker).
 const arrowMarkerFor = (option, fallback) => {
   if (option === 'open') return 'arrow';

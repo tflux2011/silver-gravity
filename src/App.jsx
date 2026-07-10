@@ -23,7 +23,8 @@ import {
   RELATIONSHIP_ORDER,
   RELATIONSHIP_TYPES,
   resolveMarkers,
-  NAVIGABILITY_OPTIONS
+  NAVIGABILITY_OPTIONS,
+  MULTIPLICITY_OPTIONS
 } from './model/relationships';
 import {
   INITIAL_NODES,
@@ -38,6 +39,14 @@ import { useHistory } from './history/useHistory';
 import ConnectorMarkers from './components/ConnectorMarkers';
 import { NodeDeleteButton, ShortcutHelp } from './components/SharedControls';
 import './App.css';
+
+// Build the multiplicity option list, preserving any pre-existing custom token
+// (e.g. loaded from a saved file) so it is not silently dropped.
+const multiplicityOptionsFor = (current) => {
+  const known = MULTIPLICITY_OPTIONS.some((o) => o.value === current);
+  const extra = !known && current ? [{ value: current, label: `${current}  (custom)` }] : [];
+  return [...extra, ...MULTIPLICITY_OPTIONS];
+};
 
 export default function App() {
   // Single undoable document. Transient UI state (selection, drag, pan) is
@@ -1313,22 +1322,30 @@ export default function App() {
 
               <div className="property-group">
                 <label className="property-label">Source Multiplicity</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 1, *, 0..*"
+                <select
                   value={selectedConnection.multiplicityFrom || ''}
                   onChange={(e) => updateConnection(selectedConnection.id, { multiplicityFrom: e.target.value })}
-                />
+                >
+                  {multiplicityOptionsFor(selectedConnection.multiplicityFrom || '').map((o) => (
+                    <option key={o.value || 'none'} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="property-group">
                 <label className="property-label">Target Multiplicity</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 1, *, 0..*"
+                <select
                   value={selectedConnection.multiplicityTo || ''}
                   onChange={(e) => updateConnection(selectedConnection.id, { multiplicityTo: e.target.value })}
-                />
+                >
+                  {multiplicityOptionsFor(selectedConnection.multiplicityTo || '').map((o) => (
+                    <option key={o.value || 'none'} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {selectedConnection.type === 'association' && (
