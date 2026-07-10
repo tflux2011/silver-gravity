@@ -89,8 +89,8 @@ button:active, .btn-text:active, .btn-icon:active {
   border-right: 1px solid var(--border-normal);
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
-  padding: var(--space-8) var(--space-8);
+  gap: 2px;
+  padding: var(--space-4) var(--space-4);
   overflow: visible;
   z-index: 8;
   transition: width 0.15s ease;
@@ -102,19 +102,20 @@ button:active, .btn-text:active, .btn-icon:active {
 }
 
 .palette-toggle {
-  width: 32px;
-  height: 32px;
-  align-self: flex-start;
+  width: 24px;
+  height: 24px;
+  align-self: flex-end;
   color: var(--text-secondary) !important;
+  display: none;
 }
 .palette--expanded .palette-toggle {
-  align-self: flex-end;
+  display: flex;
 }
 
 .palette-scroll {
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: var(--space-8);
   flex: 1;
 }
 

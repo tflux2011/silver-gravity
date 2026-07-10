@@ -18,8 +18,7 @@ import {
   Undo2,
   Redo2,
   ArrowLeftRight,
-  PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftClose
 } from 'lucide-react';
 import { TYPE_ICONS, elementDef, PALETTE_ITEMS } from './model/umlElements';
 import {
@@ -677,14 +676,16 @@ export default function App() {
         <aside
           className={`palette ${paletteExpanded ? 'palette--expanded' : ''}`}
           aria-label="UML elements"
+          onMouseEnter={() => setPaletteExpanded(true)}
+          onMouseLeave={() => setPaletteExpanded(false)}
         >
           <button
             className="palette-toggle"
-            onClick={() => setPaletteExpanded((o) => !o)}
-            title={paletteExpanded ? 'Collapse panel' : 'Expand panel'}
-            aria-label={paletteExpanded ? 'Collapse panel' : 'Expand panel'}
+            onClick={() => setPaletteExpanded(false)}
+            title="Collapse panel"
+            aria-label="Collapse panel"
           >
-            {paletteExpanded ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+            <PanelLeftClose size={16} />
           </button>
 
           <div className="palette-scroll">
