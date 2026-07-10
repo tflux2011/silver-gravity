@@ -24,6 +24,11 @@ export default function ConnectorMarkers() {
       <marker id="aggregation" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
         <path d="M 0 5 L 5 10 L 10 5 L 5 0 Z" fill="#ffffff" stroke="#9aa2af" strokeWidth="1.5" />
       </marker>
+
+      {/* Small cross for an explicitly non-navigable association end */}
+      <marker id="cross" viewBox="0 0 12 12" refX="6" refY="6" markerWidth="9" markerHeight="9" orient="auto">
+        <path d="M 2 2 L 10 10 M 10 2 L 2 10" fill="none" stroke="#9aa2af" strokeWidth="1.4" />
+      </marker>
     </defs>
   );
 }

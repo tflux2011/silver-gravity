@@ -19,7 +19,12 @@ import {
   Redo2
 } from 'lucide-react';
 import { TYPE_ICONS, elementDef, PALETTE_ITEMS } from './model/umlElements';
-import { RELATIONSHIP_ORDER, RELATIONSHIP_TYPES, relationshipDef } from './model/relationships';
+import {
+  RELATIONSHIP_ORDER,
+  RELATIONSHIP_TYPES,
+  resolveMarkers,
+  NAVIGABILITY_OPTIONS
+} from './model/relationships';
 import {
   INITIAL_NODES,
   INITIAL_CONNECTIONS,
@@ -370,6 +375,11 @@ export default function App() {
     setNodes(nodes.map((n) => (n.id === nodeId ? { ...n, text } : n)));
   };
 
+  // Patch arbitrary top-level fields on a node (stereotype, constraint, …).
+  const updateNodeFields = (nodeId, fields) => {
+    setNodes(nodes.map((n) => (n.id === nodeId ? { ...n, ...fields } : n)));
+  };
+
   const handleNameChange = (val) => {
     setEditingName(val);
     const cleaned = val.trim();
@@ -690,11 +700,25 @@ export default function App() {
               {connections.map((c) => {
                 const pathStr = calculateOrthogonalPath(c.fromNodeId, c.fromPort, c.toNodeId, c.toPort);
                 const isSelected = selectedConnectionId === c.id;
-                const relDef = relationshipDef(c.type);
-                const markerEnd = relDef.markerEnd ? { markerEnd: `url(#${relDef.markerEnd})` } : {};
+                const marks = resolveMarkers(c);
+                const markerAttrs = {};
+                if (marks.markerEndId) markerAttrs.markerEnd = `url(#${marks.markerEndId})`;
+                if (marks.markerStartId) markerAttrs.markerStart = `url(#${marks.markerStartId})`;
 
                 const startCoords = getPortCoords(c.fromNodeId, c.fromPort);
                 const endCoords = getPortCoords(c.toNodeId, c.toPort);
+                const midX = (startCoords.x + endCoords.x) / 2;
+                const midY = (startCoords.y + endCoords.y) / 2;
+
+                // Association class: dashed tie-line from the connector midpoint
+                // to the linked class node's centre.
+                let assocClassLine = null;
+                if (c.associationClassId) {
+                  const acCoords = getPortCoords(c.associationClassId, 'top');
+                  if (acCoords) {
+                    assocClassLine = `M ${midX} ${midY} L ${acCoords.x} ${acCoords.y}`;
+                  }
+                }
 
                 // Label positions near the edges of connector lines
                 const fromLabelOffset = {
@@ -708,6 +732,11 @@ export default function App() {
 
                 return (
                   <g key={c.id}>
+                    {/* Association-class tie line (dashed) */}
+                    {assocClassLine && (
+                      <path d={assocClassLine} className="connection-line assoc-class-line" strokeDasharray="4,4" />
+                    )}
+
                     {/* Invisible thicker line for easier clicks */}
                     <path
                       d={pathStr}
@@ -726,9 +755,16 @@ export default function App() {
                     <path
                       d={pathStr}
                       className={`connection-line ${isSelected ? 'selected' : ''}`}
-                      strokeDasharray={relDef.dashed ? '5,5' : 'none'}
-                      {...markerEnd}
+                      strokeDasharray={marks.dashed ? '5,5' : 'none'}
+                      {...markerAttrs}
                     />
+
+                    {/* Association name at the midpoint */}
+                    {c.label && (
+                      <text x={midX} y={midY - 6} className="relationship-name" textAnchor="middle">
+                        {c.label}
+                      </text>
+                    )}
 
                     {/* Multiplicities labels rendering */}
                     {c.multiplicityFrom && (
@@ -739,6 +775,18 @@ export default function App() {
                     {c.multiplicityTo && (
                       <text x={toLabelOffset.x} y={toLabelOffset.y} className="relationship-text">
                         {c.multiplicityTo}
+                      </text>
+                    )}
+
+                    {/* Role names near each end */}
+                    {c.roleFrom && (
+                      <text x={fromLabelOffset.x} y={fromLabelOffset.y + 12} className="relationship-role">
+                        {c.roleFrom}
+                      </text>
+                    )}
+                    {c.roleTo && (
+                      <text x={toLabelOffset.x} y={toLabelOffset.y + 12} className="relationship-role">
+                        {c.roleTo}
                       </text>
                     )}
                   </g>
@@ -829,11 +877,16 @@ export default function App() {
                       {/* Header: stereotype + element name */}
                       <div className="uml-node-header">
                         <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
-                        {def.stereotype && <span className="uml-stereotype">«{def.stereotype}»</span>}
+                        {(node.stereotype || def.stereotype) && (
+                          <span className="uml-stereotype">«{node.stereotype || def.stereotype}»</span>
+                        )}
                         <span className={`uml-node-name-row ${def.italicName ? 'is-italic' : ''}`}>
                           <TypeIcon size={13} strokeWidth={1.5} style={{ opacity: 0.7 }} />
                           <span>{node.name}</span>
                         </span>
+                        {node.constraint && (
+                          <span className="uml-node-constraint">{`{${node.constraint}}`}</span>
+                        )}
                       </div>
 
                       {/* Attributes / enum-literals area */}
@@ -844,8 +897,15 @@ export default function App() {
                           </span>
                         )}
                         {node.attributes.map((attr) => (
-                          <div key={attr.id} className="uml-node-item">
-                            {def.isEnum ? attr.name : `${attr.visibility} ${attr.name}: ${attr.type}`}
+                          <div
+                            key={attr.id}
+                            className={`uml-node-item ${attr.isStatic ? 'uml-static' : ''}`}
+                          >
+                            {def.isEnum
+                              ? attr.name
+                              : `${attr.isDerived ? '/' : ''}${attr.visibility} ${attr.name}: ${attr.type}${
+                                  attr.defaultValue ? ` = ${attr.defaultValue}` : ''
+                                }${attr.property ? ` {${attr.property}}` : ''}`}
                           </div>
                         ))}
                       </div>
@@ -859,8 +919,14 @@ export default function App() {
                             </span>
                           )}
                           {node.methods.map((meth) => (
-                            <div key={meth.id} className="uml-node-item">
+                            <div
+                              key={meth.id}
+                              className={`uml-node-item ${meth.isStatic ? 'uml-static' : ''} ${
+                                meth.isAbstract ? 'uml-abstract' : ''
+                              }`}
+                            >
                               {meth.visibility} {meth.name}({meth.parameters}): {meth.returnType}
+                              {meth.property ? ` {${meth.property}}` : ''}
                             </div>
                           ))}
                         </div>
@@ -946,6 +1012,31 @@ export default function App() {
                 </div>
               )}
 
+              {selectedDef.shape === 'class' && (
+                <div className="property-group">
+                  <div className="property-row">
+                    <div style={{ flex: 1 }}>
+                      <label className="property-label">Stereotype</label>
+                      <input
+                        type="text"
+                        placeholder={selectedDef.stereotype || 'e.g. entity'}
+                        value={selectedNode.stereotype || ''}
+                        onChange={(e) => updateNodeFields(selectedNode.id, { stereotype: e.target.value })}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="property-label">Constraint</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. abstract"
+                        value={selectedNode.constraint || ''}
+                        onChange={(e) => updateNodeFields(selectedNode.id, { constraint: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="property-group">
                 <div className="property-row">
                   <div style={{ flex: 1 }}>
@@ -974,41 +1065,77 @@ export default function App() {
 
                   <div className="item-list">
                     {selectedNode.attributes.map((attr) => (
-                      <div key={attr.id} className="item-list-row">
-                        {!selectedDef.isEnum && (
-                          <select
-                            style={{ width: '40px' }}
-                            value={attr.visibility}
-                            onChange={(e) => updateAttribute(selectedNode.id, attr.id, { visibility: e.target.value })}
-                          >
-                            <option value="+">+</option>
-                            <option value="-">-</option>
-                            <option value="#">#</option>
-                            <option value="~">~</option>
-                          </select>
-                        )}
-                        <input
-                          type="text"
-                          placeholder={selectedDef.isEnum ? 'VALUE' : 'name'}
-                          value={attr.name}
-                          onChange={(e) => updateAttribute(selectedNode.id, attr.id, { name: e.target.value })}
-                        />
-                        {!selectedDef.isEnum && (
+                      <div key={attr.id} className="item-block">
+                        <div className="item-list-row">
+                          {!selectedDef.isEnum && (
+                            <select
+                              style={{ width: '40px' }}
+                              value={attr.visibility}
+                              onChange={(e) => updateAttribute(selectedNode.id, attr.id, { visibility: e.target.value })}
+                            >
+                              <option value="+">+</option>
+                              <option value="-">-</option>
+                              <option value="#">#</option>
+                              <option value="~">~</option>
+                            </select>
+                          )}
                           <input
                             type="text"
-                            placeholder="type"
-                            style={{ width: '70px' }}
-                            value={attr.type}
-                            onChange={(e) => updateAttribute(selectedNode.id, attr.id, { type: e.target.value })}
+                            placeholder={selectedDef.isEnum ? 'VALUE' : 'name'}
+                            value={attr.name}
+                            onChange={(e) => updateAttribute(selectedNode.id, attr.id, { name: e.target.value })}
                           />
+                          {!selectedDef.isEnum && (
+                            <input
+                              type="text"
+                              placeholder="type"
+                              style={{ width: '70px' }}
+                              value={attr.type}
+                              onChange={(e) => updateAttribute(selectedNode.id, attr.id, { type: e.target.value })}
+                            />
+                          )}
+                          <button
+                            className="btn-danger btn-small"
+                            style={{ padding: '0 8px', height: '28px' }}
+                            onClick={() => removeAttribute(selectedNode.id, attr.id)}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+
+                        {!selectedDef.isEnum && (
+                          <div className="item-list-row item-sub">
+                            <label className="mini-toggle" title="Static member (underlined)">
+                              <input
+                                type="checkbox"
+                                checked={!!attr.isStatic}
+                                onChange={(e) => updateAttribute(selectedNode.id, attr.id, { isStatic: e.target.checked })}
+                              />
+                              static
+                            </label>
+                            <label className="mini-toggle" title="Derived attribute (/ prefix)">
+                              <input
+                                type="checkbox"
+                                checked={!!attr.isDerived}
+                                onChange={(e) => updateAttribute(selectedNode.id, attr.id, { isDerived: e.target.checked })}
+                              />
+                              derived
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="= default"
+                              style={{ width: '72px' }}
+                              value={attr.defaultValue || ''}
+                              onChange={(e) => updateAttribute(selectedNode.id, attr.id, { defaultValue: e.target.value })}
+                            />
+                            <input
+                              type="text"
+                              placeholder="{property}"
+                              value={attr.property || ''}
+                              onChange={(e) => updateAttribute(selectedNode.id, attr.id, { property: e.target.value })}
+                            />
+                          </div>
                         )}
-                        <button
-                          className="btn-danger btn-small"
-                          style={{ padding: '0 8px', height: '28px' }}
-                          onClick={() => removeAttribute(selectedNode.id, attr.id)}
-                        >
-                          <Trash2 size={12} />
-                        </button>
                       </div>
                     ))}
                   </div>
@@ -1068,6 +1195,30 @@ export default function App() {
                             <Trash2 size={12} />
                           </button>
                         </div>
+                        <div className="item-list-row item-sub" style={{ width: '100%' }}>
+                          <label className="mini-toggle" title="Static operation (underlined)">
+                            <input
+                              type="checkbox"
+                              checked={!!meth.isStatic}
+                              onChange={(e) => updateMethod(selectedNode.id, meth.id, { isStatic: e.target.checked })}
+                            />
+                            static
+                          </label>
+                          <label className="mini-toggle" title="Abstract operation (italic)">
+                            <input
+                              type="checkbox"
+                              checked={!!meth.isAbstract}
+                              onChange={(e) => updateMethod(selectedNode.id, meth.id, { isAbstract: e.target.checked })}
+                            />
+                            abstract
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="{property}"
+                            value={meth.property || ''}
+                            onChange={(e) => updateMethod(selectedNode.id, meth.id, { property: e.target.value })}
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1095,6 +1246,72 @@ export default function App() {
               </div>
 
               <div className="property-group">
+                <label className="property-label">Association Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. enrolls in ▸"
+                  value={selectedConnection.label || ''}
+                  onChange={(e) => updateConnection(selectedConnection.id, { label: e.target.value })}
+                />
+              </div>
+
+              {RELATIONSHIP_TYPES[selectedConnection.type]?.navigable && (
+                <div className="property-group">
+                  <div className="property-row">
+                    <div style={{ flex: 1 }}>
+                      <label className="property-label">Source End</label>
+                      <select
+                        value={selectedConnection.startArrow || 'none'}
+                        onChange={(e) => updateConnection(selectedConnection.id, { startArrow: e.target.value })}
+                      >
+                        {NAVIGABILITY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label className="property-label">Target End</label>
+                      <select
+                        value={selectedConnection.endArrow || 'none'}
+                        onChange={(e) => updateConnection(selectedConnection.id, { endArrow: e.target.value })}
+                      >
+                        {NAVIGABILITY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="property-group">
+                <div className="property-row">
+                  <div style={{ flex: 1 }}>
+                    <label className="property-label">Source Role</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. owner"
+                      value={selectedConnection.roleFrom || ''}
+                      onChange={(e) => updateConnection(selectedConnection.id, { roleFrom: e.target.value })}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="property-label">Target Role</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. items"
+                      value={selectedConnection.roleTo || ''}
+                      onChange={(e) => updateConnection(selectedConnection.id, { roleTo: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="property-group">
                 <label className="property-label">Source Multiplicity</label>
                 <input
                   type="text"
@@ -1113,6 +1330,37 @@ export default function App() {
                   onChange={(e) => updateConnection(selectedConnection.id, { multiplicityTo: e.target.value })}
                 />
               </div>
+
+              {selectedConnection.type === 'association' && (
+                <div className="property-group">
+                  <label className="property-label">Association Class</label>
+                  <select
+                    value={selectedConnection.associationClassId || ''}
+                    onChange={(e) =>
+                      updateConnection(selectedConnection.id, {
+                        associationClassId: e.target.value || null
+                      })
+                    }
+                  >
+                    <option value="">None</option>
+                    {nodes
+                      .filter(
+                        (n) =>
+                          elementDef(n.type).shape === 'class' &&
+                          n.id !== selectedConnection.fromNodeId &&
+                          n.id !== selectedConnection.toNodeId
+                      )
+                      .map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.name}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="property-label" style={{ fontSize: '10px', marginTop: '4px', color: 'var(--text-dim)' }}>
+                    Links a class to this association with a dashed tie-line.
+                  </div>
+                </div>
+              )}
 
               {/* Info tips */}
               <div className="help-card" style={{ marginTop: '16px' }}>

@@ -191,6 +191,44 @@ button:active, .btn-text:active, .btn-icon:active {
   font-size: 10px;
 }
 
+/* Association name rendered at the connector midpoint */
+.relationship-name {
+  fill: var(--text-primary);
+  font-family: var(--font-sans, sans-serif);
+  font-size: 11px;
+  font-style: italic;
+}
+
+/* Association end role names */
+.relationship-role {
+  fill: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* Dashed tie-line linking an association class to its association */
+.assoc-class-line {
+  stroke: var(--border-normal);
+  fill: none;
+}
+
+/* Static members: underlined per UML 2.5 */
+.uml-node-item.uml-static {
+  text-decoration: underline;
+}
+
+/* Abstract operations: rendered in italic */
+.uml-node-item.uml-abstract {
+  font-style: italic;
+}
+
+/* Class-level constraint tag shown in the header */
+.uml-node-constraint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
 /* UML Class Node Cards - Flat, sharp corners, clear alignment, no shadow */
 .uml-node {
   position: absolute;
@@ -578,6 +616,42 @@ button:active, .btn-text:active, .btn-icon:active {
   display: flex;
   gap: var(--space-4);
   align-items: center;
+}
+
+/* Grouped attribute/method editor (main row + advanced sub-row) */
+.item-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-bottom: var(--space-8);
+  border-bottom: 1px dashed var(--border-dim);
+}
+
+.item-block:last-child {
+  border-bottom: none;
+}
+
+/* Advanced options row (static / derived / abstract / property strings) */
+.item-sub {
+  flex-wrap: wrap;
+}
+
+.mini-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mini-toggle input {
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--border-focus);
 }
 
 .item-list-row input, .item-list-row select {
