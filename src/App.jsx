@@ -606,17 +606,17 @@ export default function App() {
                 title={`Add ${def.label}`}
                 aria-label={`Add ${def.label}`}
               >
-                <Icon size={27} strokeWidth={1.5} />
+                <Icon size={23} strokeWidth={1.5} />
               </button>
             );
           })}
         </div>
         <div className="activity-bar-bottom">
           <button className="activity-btn" title="Settings" aria-label="Settings">
-            <Settings size={27} strokeWidth={1.5} />
+            <Settings size={23} strokeWidth={1.5} />
           </button>
           <button className="activity-btn" title="Account" aria-label="Account">
-            <UserCircle size={27} strokeWidth={1.5} />
+            <UserCircle size={23} strokeWidth={1.5} />
           </button>
         </div>
       </nav>
