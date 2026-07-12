@@ -37,7 +37,7 @@ import {
   HOSPITAL_TEMPLATE_NODES,
   HOSPITAL_TEMPLATE_CONNECTIONS
 } from './model/samples';
-import { portCoordsFor, orthogonalPath, getElbowMidpoint, snapTo8, getFitDimensions } from './model/geometry';
+import { portCoordsFor, orthogonalPath, getElbowMidpoint, snapTo8, getFitDimensions, calculateConnectionPathWithJumps } from './model/geometry';
 import { useHistory } from './history/useHistory';
 import ConnectorMarkers from './components/ConnectorMarkers';
 import { NodeDeleteButton, ShortcutHelp } from './components/SharedControls';
@@ -79,7 +79,9 @@ export default function App() {
     [setDoc]
   );
 
-  const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState([]);
+  const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
+  const setSelectedNodeId = useCallback((id) => setSelectedNodeIds(id ? [id] : []), []);
   const [selectedConnectionId, setSelectedConnectionId] = useState(null);
 
   const [zoom, setZoom] = useState(1.0);
@@ -88,11 +90,10 @@ export default function App() {
   const [filePath, setFilePath] = useState(null);
 
   // Dragging states
-  const [draggedNodeId, setDraggedNodeId] = useState(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  // Live position of the node being dragged. Kept out of history so a drag
-  // produces exactly one undo entry (committed on mouse-up).
-  const [livePos, setLivePos] = useState(null);
+  const [draggedNodeId, setDraggedNodeId] = useState(null); // ID of the node clicked to start drag
+  const [dragStartMouse, setDragStartMouse] = useState(null); // { x, y } mouse canvas pos on drag start
+  const [dragStartNodes, setDragStartNodes] = useState([]); // [{ id, x, y }] original nodes coords
+  const [draggedNodesDelta, setDraggedNodesDelta] = useState({ dx: 0, dy: 0 }); // live delta relative to start
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
@@ -108,11 +109,18 @@ export default function App() {
   // Inline name editing — double-click a node name on the canvas to edit
   const [inlineEditId, setInlineEditId] = useState(null);
 
+  // Inline attribute/method list item editing — double-click an item inside a node to edit
+  const [inlineAttrEdit, setInlineAttrEdit] = useState(null); // { nodeId, attrId }
+  const [inlineMethEdit, setInlineMethEdit] = useState(null); // { nodeId, methId }
+
   // Drawing state — user drags to define element size
   const [drawing, setDrawing] = useState(null); // { startX, startY, currentX, currentY }
 
   // Resizing state — user drags a handle to resize a node
   const [resizing, setResizing] = useState(null); // { nodeId, handle, startX, startY, origX, origY, origW, origH }
+
+  // Lasso select state — user drags on empty space to select multiple elements
+  const [lasso, setLasso] = useState(null); // { startX, startY, currentX, currentY }
 
   // Document-level resize handler (bypasses React event delegation issues)
   useEffect(() => {
@@ -259,12 +267,19 @@ export default function App() {
   // Effective coordinates for a node: the in-flight drag position wins.
   const effectiveNode = useCallback(
     (node) => {
-      if (livePos && draggedNodeId === node.id) {
-        return { ...node, x: livePos.x, y: livePos.y };
+      if (draggedNodeId && dragStartNodes && dragStartNodes.length > 0) {
+        const startNode = dragStartNodes.find((dn) => dn.id === node.id);
+        if (startNode) {
+          return {
+            ...node,
+            x: startNode.x + (draggedNodesDelta?.dx || 0),
+            y: startNode.y + (draggedNodesDelta?.dy || 0)
+          };
+        }
       }
       return node;
     },
-    [livePos, draggedNodeId]
+    [draggedNodeId, dragStartNodes, draggedNodesDelta]
   );
 
   // Node operations
@@ -276,10 +291,21 @@ export default function App() {
           (c) => c.fromNodeId !== nodeId && c.toNodeId !== nodeId
         )
       }));
-      setSelectedNodeId((cur) => (cur === nodeId ? null : cur));
+      setSelectedNodeIds((cur) => cur.filter((id) => id !== nodeId));
     },
     [setDoc]
   );
+
+  const deleteSelectedNodes = useCallback(() => {
+    if (selectedNodeIds.length === 0) return;
+    setDoc((prev) => ({
+      nodes: prev.nodes.filter((n) => !selectedNodeIds.includes(n.id)),
+      connections: prev.connections.filter(
+        (c) => !selectedNodeIds.includes(c.fromNodeId) && !selectedNodeIds.includes(c.toNodeId)
+      )
+    }));
+    setSelectedNodeIds([]);
+  }, [selectedNodeIds, setDoc]);
 
   const deleteConnection = useCallback(
     (connId) => {
@@ -308,10 +334,10 @@ export default function App() {
         return;
       }
 
-      // Delete key or Backspace key removes selected node or connection
+      // Delete key or Backspace key removes selected nodes or connection
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedNodeId) {
-          deleteNode(selectedNodeId);
+        if (selectedNodeIds.length > 0) {
+          deleteSelectedNodes();
         } else if (selectedConnectionId) {
           deleteConnection(selectedConnectionId);
         }
@@ -335,27 +361,27 @@ export default function App() {
         addNode('class');
       }
 
-      // Arrow keys nudging for selected node
-      if (selectedNodeId) {
+      // Arrow keys nudging for selected nodes
+      if (selectedNodeIds.length > 0) {
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           setNodes((prev) =>
-            prev.map((n) => (n.id === selectedNodeId ? { ...n, y: snapTo8(n.y - 8) } : n))
+            prev.map((n) => (selectedNodeIds.includes(n.id) ? { ...n, y: snapTo8(n.y - 8) } : n))
           );
         } else if (e.key === 'ArrowDown') {
           e.preventDefault();
           setNodes((prev) =>
-            prev.map((n) => (n.id === selectedNodeId ? { ...n, y: snapTo8(n.y + 8) } : n))
+            prev.map((n) => (selectedNodeIds.includes(n.id) ? { ...n, y: snapTo8(n.y + 8) } : n))
           );
         } else if (e.key === 'ArrowLeft') {
           e.preventDefault();
           setNodes((prev) =>
-            prev.map((n) => (n.id === selectedNodeId ? { ...n, x: snapTo8(n.x - 8) } : n))
+            prev.map((n) => (selectedNodeIds.includes(n.id) ? { ...n, x: snapTo8(n.x - 8) } : n))
           );
         } else if (e.key === 'ArrowRight') {
           e.preventDefault();
           setNodes((prev) =>
-            prev.map((n) => (n.id === selectedNodeId ? { ...n, x: snapTo8(n.x + 8) } : n))
+            prev.map((n) => (selectedNodeIds.includes(n.id) ? { ...n, x: snapTo8(n.x + 8) } : n))
           );
         }
       }
@@ -364,7 +390,7 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedNodeId, selectedConnectionId, nodes, connections, filePath, undo, redo]);
+  }, [selectedNodeIds, selectedConnectionId, nodes, connections, filePath, undo, redo, deleteSelectedNodes]);
 
   // IPC Bridge File operations
   const handleOpen = async () => {
@@ -590,6 +616,110 @@ export default function App() {
     );
   };
 
+  const handleAlign = (type) => {
+    if (selectedNodeIds.length <= 1) return;
+    const activeNodes = nodes.filter((n) => selectedNodeIds.includes(n.id));
+
+    if (type === 'left') {
+      const minX = Math.min(...activeNodes.map((n) => n.x));
+      setNodes((prev) =>
+        prev.map((n) => (selectedNodeIds.includes(n.id) ? { ...n, x: minX } : n))
+      );
+    } else if (type === 'right') {
+      const maxR = Math.max(...activeNodes.map((n) => {
+        const el = nodeRefs.current[n.id];
+        return n.x + (el ? el.offsetWidth : 160);
+      }));
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (!selectedNodeIds.includes(n.id)) return n;
+          const el = nodeRefs.current[n.id];
+          const w = el ? el.offsetWidth : 160;
+          return { ...n, x: snapTo8(maxR - w) };
+        })
+      );
+    } else if (type === 'centerX') {
+      const centers = activeNodes.map((n) => {
+        const el = nodeRefs.current[n.id];
+        return n.x + (el ? el.offsetWidth : 160) / 2;
+      });
+      const avgCenter = snapTo8(centers.reduce((sum, c) => sum + c, 0) / centers.length);
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (!selectedNodeIds.includes(n.id)) return n;
+          const el = nodeRefs.current[n.id];
+          const w = el ? el.offsetWidth : 160;
+          return { ...n, x: snapTo8(avgCenter - w / 2) };
+        })
+      );
+    } else if (type === 'top') {
+      const minY = Math.min(...activeNodes.map((n) => n.y));
+      setNodes((prev) =>
+        prev.map((n) => (selectedNodeIds.includes(n.id) ? { ...n, y: minY } : n))
+      );
+    } else if (type === 'bottom') {
+      const maxB = Math.max(...activeNodes.map((n) => {
+        const el = nodeRefs.current[n.id];
+        return n.y + (el ? el.offsetHeight : 100);
+      }));
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (!selectedNodeIds.includes(n.id)) return n;
+          const el = nodeRefs.current[n.id];
+          const h = el ? el.offsetHeight : 100;
+          return { ...n, y: snapTo8(maxB - h) };
+        })
+      );
+    } else if (type === 'centerY') {
+      const centers = activeNodes.map((n) => {
+        const el = nodeRefs.current[n.id];
+        return n.y + (el ? el.offsetHeight : 100) / 2;
+      });
+      const avgCenter = snapTo8(centers.reduce((sum, c) => sum + c, 0) / centers.length);
+      setNodes((prev) =>
+        prev.map((n) => {
+          if (!selectedNodeIds.includes(n.id)) return n;
+          const el = nodeRefs.current[n.id];
+          const h = el ? el.offsetHeight : 100;
+          return { ...n, y: snapTo8(avgCenter - h / 2) };
+        })
+      );
+    }
+  };
+
+  const handleDistribute = (type) => {
+    if (selectedNodeIds.length <= 2) return;
+    const activeNodes = [...nodes.filter((n) => selectedNodeIds.includes(n.id))];
+
+    if (type === 'horizontal') {
+      activeNodes.sort((a, b) => a.x - b.x);
+      const minX = activeNodes[0].x;
+      const maxX = activeNodes[activeNodes.length - 1].x;
+      const span = maxX - minX;
+      const step = span / (activeNodes.length - 1);
+      setNodes((prev) =>
+        prev.map((n) => {
+          const idx = activeNodes.findIndex((an) => an.id === n.id);
+          if (idx === -1) return n;
+          return { ...n, x: snapTo8(minX + idx * step) };
+        })
+      );
+    } else if (type === 'vertical') {
+      activeNodes.sort((a, b) => a.y - b.y);
+      const minY = activeNodes[0].y;
+      const maxY = activeNodes[activeNodes.length - 1].y;
+      const span = maxY - minY;
+      const step = span / (activeNodes.length - 1);
+      setNodes((prev) =>
+        prev.map((n) => {
+          const idx = activeNodes.findIndex((an) => an.id === n.id);
+          if (idx === -1) return n;
+          return { ...n, y: snapTo8(minY + idx * step) };
+        })
+      );
+    }
+  };
+
   // Attributes / Methods editors
   const addAttribute = (nodeId) => {
     setNodes(
@@ -675,6 +805,82 @@ export default function App() {
     );
   };
 
+  const handleInlineAttributeSubmit = (nodeId, attrId, textValue) => {
+    const raw = textValue.trim();
+    if (!raw) {
+      removeAttribute(nodeId, attrId);
+      setInlineAttrEdit(null);
+      return;
+    }
+
+    const regex = /^([+\-#~]?)\s*(\/?)\s*([a-zA-Z_0-9\-\*]*)\s*(?::\s*([^=]*))?(?:\s*=\s*(.*))?$/;
+    const match = raw.match(regex);
+    if (match) {
+      const visibility = match[1] || '+';
+      const isDerived = match[2] === '/';
+      let name = match[3] || 'newAttribute';
+      let rest = match[4] || 'String';
+      let defaultValue = match[5] || '';
+
+      let property = '';
+      const propMatch = rest.match(/\{([^}]+)\}/);
+      if (propMatch) {
+        property = propMatch[1];
+        rest = rest.replace(/\{[^}]+\}/, '').trim();
+      } else {
+        const propMatchDef = defaultValue.match(/\{([^}]+)\}/);
+        if (propMatchDef) {
+          property = propMatchDef[1];
+          defaultValue = defaultValue.replace(/\{[^}]+\}/, '').trim();
+        }
+      }
+
+      updateAttribute(nodeId, attrId, {
+        visibility,
+        isDerived,
+        name: name.trim(),
+        type: rest.trim(),
+        defaultValue: defaultValue.trim(),
+        property: property.trim()
+      });
+    }
+    setInlineAttrEdit(null);
+  };
+
+  const handleInlineMethodSubmit = (nodeId, methId, textValue) => {
+    const raw = textValue.trim();
+    if (!raw) {
+      removeMethod(nodeId, methId);
+      setInlineMethEdit(null);
+      return;
+    }
+
+    const regex = /^([+\-#~]?)\s*([a-zA-Z_0-9\-]*)\s*(?:\(([^)]*)\))?\s*(?::\s*(.*))?$/;
+    const match = raw.match(regex);
+    if (match) {
+      const visibility = match[1] || '+';
+      const name = match[2] || 'newMethod';
+      let parameters = match[3] || '';
+      let returnType = match[4] || 'void';
+
+      let property = '';
+      const propMatch = returnType.match(/\{([^}]+)\}/);
+      if (propMatch) {
+        property = propMatch[1];
+        returnType = returnType.replace(/\{[^}]+\}/, '').trim();
+      }
+
+      updateMethod(nodeId, methId, {
+        visibility,
+        name: name.trim(),
+        parameters: parameters.trim(),
+        returnType: returnType.trim(),
+        property: property.trim()
+      });
+    }
+    setInlineMethEdit(null);
+  };
+
   const updateConnection = (connId, fields) => {
     setConnections((prev) => prev.map((c) => (c.id === connId ? { ...c, ...fields } : c)));
   };
@@ -726,6 +932,15 @@ export default function App() {
       return;
     }
 
+    // Lasso selection on Shift + drag
+    if (e.shiftKey) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - panX) / zoom;
+      const y = (e.clientY - rect.top - panY) / zoom;
+      setLasso({ startX: x, startY: y, currentX: x, currentY: y });
+      return;
+    }
+
     setIsPanning(true);
     setPanStart({ x: e.clientX - panX, y: e.clientY - panY });
   };
@@ -738,14 +953,123 @@ export default function App() {
       const x = (e.clientX - rect.left - panX) / zoom;
       const y = (e.clientY - rect.top - panY) / zoom;
       setDrawing((d) => ({ ...d, currentX: x, currentY: y }));
+    } else if (lasso) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - panX) / zoom;
+      const y = (e.clientY - rect.top - panY) / zoom;
+      setLasso((l) => ({ ...l, currentX: x, currentY: y }));
     } else if (isPanning) {
       setPanX(e.clientX - panStart.x);
       setPanY(e.clientY - panStart.y);
-    } else if (draggedNodeId) {
-      // Live drag - update transient position only (committed on mouse-up).
-      const newX = snapTo8((e.clientX - panX) / zoom - dragOffset.x);
-      const newY = snapTo8((e.clientY - panY) / zoom - dragOffset.y);
-      setLivePos({ x: newX, y: newY });
+    } else if (draggedNodeId && dragStartMouse) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const currentMouseX = (e.clientX - rect.left - panX) / zoom;
+      const currentMouseY = (e.clientY - rect.top - panY) / zoom;
+
+      const dx = currentMouseX - dragStartMouse.x;
+      const dy = currentMouseY - dragStartMouse.y;
+
+      // Smart alignment guides calculations
+      const draggedNodeIds = dragStartNodes.map((dn) => dn.id);
+      const otherNodes = nodes.filter((n) => !draggedNodeIds.includes(n.id));
+
+      const guideLines = [];
+      let snapX = null;
+      let snapY = null;
+      const SNAP_THRESHOLD = 5;
+
+      for (const dn of dragStartNodes) {
+        const el = nodeRefs.current[dn.id];
+        const w = el ? el.offsetWidth : 160;
+        const h = el ? el.offsetHeight : 100;
+
+        const currentL = dn.x + dx;
+        const currentR = currentL + w;
+        const currentC = currentL + w / 2;
+
+        for (const target of otherNodes) {
+          const tEl = nodeRefs.current[target.id];
+          const tW = tEl ? tEl.offsetWidth : 160;
+          const tH = tEl ? tEl.offsetHeight : 100;
+
+          const targetL = target.x;
+          const targetR = target.x + tW;
+          const targetC = target.x + tW / 2;
+
+          if (Math.abs(currentL - targetL) < SNAP_THRESHOLD) {
+            snapX = targetL - dn.x;
+            guideLines.push({ type: 'v', val: targetL });
+          } else if (Math.abs(currentL - targetR) < SNAP_THRESHOLD) {
+            snapX = targetR - dn.x;
+            guideLines.push({ type: 'v', val: targetR });
+          } else if (Math.abs(currentL - targetC) < SNAP_THRESHOLD) {
+            snapX = targetC - dn.x;
+            guideLines.push({ type: 'v', val: targetC });
+          }
+
+          if (Math.abs(currentR - targetL) < SNAP_THRESHOLD) {
+            snapX = targetL - w - dn.x;
+            guideLines.push({ type: 'v', val: targetL });
+          } else if (Math.abs(currentR - targetR) < SNAP_THRESHOLD) {
+            snapX = targetR - w - dn.x;
+            guideLines.push({ type: 'v', val: targetR });
+          }
+
+          if (Math.abs(currentC - targetC) < SNAP_THRESHOLD) {
+            snapX = targetC - w / 2 - dn.x;
+            guideLines.push({ type: 'v', val: targetC });
+          }
+        }
+      }
+
+      for (const dn of dragStartNodes) {
+        const el = nodeRefs.current[dn.id];
+        const w = el ? el.offsetWidth : 160;
+        const h = el ? el.offsetHeight : 100;
+
+        const currentT = dn.y + dy;
+        const currentB = currentT + h;
+        const currentC = currentT + h / 2;
+
+        for (const target of otherNodes) {
+          const tEl = nodeRefs.current[target.id];
+          const tW = tEl ? tEl.offsetWidth : 160;
+          const tH = tEl ? tEl.offsetHeight : 100;
+
+          const targetT = target.y;
+          const targetB = target.y + tH;
+          const targetC = target.y + tH / 2;
+
+          if (Math.abs(currentT - targetT) < SNAP_THRESHOLD) {
+            snapY = targetT - dn.y;
+            guideLines.push({ type: 'h', val: targetT });
+          } else if (Math.abs(currentT - targetB) < SNAP_THRESHOLD) {
+            snapY = targetB - dn.y;
+            guideLines.push({ type: 'h', val: targetB });
+          }
+
+          if (Math.abs(currentB - targetT) < SNAP_THRESHOLD) {
+            snapY = targetT - h - dn.y;
+            guideLines.push({ type: 'h', val: targetT });
+          } else if (Math.abs(currentB - targetB) < SNAP_THRESHOLD) {
+            snapY = targetB - h - dn.y;
+            guideLines.push({ type: 'h', val: targetB });
+          }
+
+          if (Math.abs(currentC - targetC) < SNAP_THRESHOLD) {
+            snapY = targetC - h / 2 - dn.y;
+            guideLines.push({ type: 'h', val: targetC });
+          }
+        }
+      }
+
+      const finalDx = snapX !== null ? snapX : snapTo8(dx);
+      const finalDy = snapY !== null ? snapY : snapTo8(dy);
+
+      setDraggedNodesDelta({ dx: finalDx, dy: finalDy });
+      setActiveGuidelines(
+        guideLines.filter((v, i, self) => self.findIndex((t) => t.type === v.type && t.val === v.val) === i)
+      );
     } else if (drawingConnection) {
       // Dynamic connection drawing preview
       const rect = canvasRef.current.getBoundingClientRect();
@@ -770,13 +1094,52 @@ export default function App() {
       return;
     }
 
-    // Commit a completed node drag as a single undoable change.
-    if (draggedNodeId && livePos) {
-      updateNodeCoords(draggedNodeId, livePos.x, livePos.y);
+    // Finalize lasso selection
+    if (lasso) {
+      const xMin = Math.min(lasso.startX, lasso.currentX);
+      const xMax = Math.max(lasso.startX, lasso.currentX);
+      const yMin = Math.min(lasso.startY, lasso.currentY);
+      const yMax = Math.max(lasso.startY, lasso.currentY);
+
+      const selected = [];
+      nodes.forEach((n) => {
+        const el = nodeRefs.current[n.id];
+        const w = el ? el.offsetWidth : 160;
+        const h = el ? el.offsetHeight : 100;
+        const overlaps = !(n.x + w < xMin || n.x > xMax || n.y + h < yMin || n.y > yMax);
+        if (overlaps) {
+          selected.push(n.id);
+        }
+      });
+      setSelectedNodeIds(selected);
+      setSelectedConnectionId(null);
+      setLasso(null);
+      return;
     }
+
+    // Commit group node drag
+    if (draggedNodeId && dragStartNodes.length > 0 && draggedNodesDelta && (draggedNodesDelta.dx !== 0 || draggedNodesDelta.dy !== 0)) {
+      setNodes((prev) =>
+        prev.map((n) => {
+          const startNode = dragStartNodes.find((dn) => dn.id === n.id);
+          if (startNode) {
+            return {
+              ...n,
+              x: snapTo8(startNode.x + draggedNodesDelta.dx),
+              y: snapTo8(startNode.y + draggedNodesDelta.dy)
+            };
+          }
+          return n;
+        })
+      );
+    }
+
     setIsPanning(false);
     setDraggedNodeId(null);
-    setLivePos(null);
+    setDragStartMouse(null);
+    setDragStartNodes([]);
+    setDraggedNodesDelta({ dx: 0, dy: 0 });
+    setActiveGuidelines([]);
     setDrawingConnection(null);
   };
 
@@ -790,10 +1153,8 @@ export default function App() {
     return portCoordsFor(effectiveNode(node), portName, width, height);
   };
 
-  const calculateOrthogonalPath = (fromId, fromPort, toId, toPort, midOffset) => {
-    const start = getPortCoords(fromId, fromPort);
-    const end = getPortCoords(toId, toPort);
-    return orthogonalPath(start, end, fromPort, toPort, midOffset);
+  const calculateOrthogonalPath = (conn) => {
+    return calculateConnectionPathWithJumps(conn, connections, getPortCoords);
   };
 
   // Render variables
@@ -954,6 +1315,41 @@ export default function App() {
               <Maximize2 size={16} />
             </button>
           </div>
+
+          {selectedNodeIds.length > 1 && (
+            <div className="toolbar-group" style={{ marginLeft: '12px' }}>
+              <span className="toolbar-label" style={{ fontSize: '11px', color: 'var(--text-dim)', marginRight: '4px' }}>Align:</span>
+              <button className="btn-icon" onClick={() => handleAlign('left')} title="Align Left">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="2" x2="4" y2="22" strokeWidth="2"></line><rect x="8" y="5" width="12" height="4" rx="1"></rect><rect x="8" y="15" width="8" height="4" rx="1"></rect></svg>
+              </button>
+              <button className="btn-icon" onClick={() => handleAlign('centerX')} title="Align Center X">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22" strokeWidth="2"></line><rect x="4" y="5" width="16" height="4" rx="1"></rect><rect x="6" y="15" width="12" height="4" rx="1"></rect></svg>
+              </button>
+              <button className="btn-icon" onClick={() => handleAlign('right')} title="Align Right">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="20" y1="2" x2="20" y2="22" strokeWidth="2"></line><rect x="4" y="5" width="12" height="4" rx="1"></rect><rect x="8" y="15" width="8" height="4" rx="1"></rect></svg>
+              </button>
+              <button className="btn-icon" onClick={() => handleAlign('top')} title="Align Top">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="2" y1="4" x2="22" y2="4" strokeWidth="2"></line><rect x="5" y="8" width="4" height="12" rx="1"></rect><rect x="15" y="8" width="4" height="8" rx="1"></rect></svg>
+              </button>
+              <button className="btn-icon" onClick={() => handleAlign('centerY')} title="Align Center Y">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="2" y1="12" x2="22" y2="12" strokeWidth="2"></line><rect x="5" y="4" width="4" height="16" rx="1"></rect><rect x="15" y="6" width="4" height="12" rx="1"></rect></svg>
+              </button>
+              <button className="btn-icon" onClick={() => handleAlign('bottom')} title="Align Bottom">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="2" y1="20" x2="22" y2="20" strokeWidth="2"></line><rect x="5" y="4" width="4" height="12" rx="1"></rect><rect x="15" y="12" width="4" height="8" rx="1"></rect></svg>
+              </button>
+              {selectedNodeIds.length > 2 && (
+                <>
+                  <span className="toolbar-label" style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '8px', marginRight: '4px' }}>Dist:</span>
+                  <button className="btn-icon" onClick={() => handleDistribute('horizontal')} title="Distribute Horizontally">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="2" x2="4" y2="22"></line><line x1="20" y1="2" x2="20" y2="22"></line><rect x="8" y="7" width="8" height="10" rx="1"></rect></svg>
+                  </button>
+                  <button className="btn-icon" onClick={() => handleDistribute('vertical')} title="Distribute Vertically">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="2" y1="4" x2="22" y2="4"></line><line x1="2" y1="20" x2="22" y2="20"></line><rect x="7" y="8" width="10" height="8" rx="1"></rect></svg>
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Workspace (canvas + right sidebar) */}
@@ -993,7 +1389,7 @@ export default function App() {
 
               {/* Draw established connection lines */}
               {connections.map((c) => {
-                const pathStr = calculateOrthogonalPath(c.fromNodeId, c.fromPort, c.toNodeId, c.toPort, c.midOffset);
+                const pathStr = calculateOrthogonalPath(c);
                 const isSelected = selectedConnectionId === c.id;
                 const marks = resolveMarkers(c);
                 const markerAttrs = {};
@@ -1162,7 +1558,7 @@ export default function App() {
                       };
                       setConnections([...connections, newConnection]);
                       setSelectedConnectionId(newConnection.id);
-                      setSelectedNodeId(null);
+                      setSelectedNodeIds([]);
                       setDrawingConnection(null);
                       return;
                     }
@@ -1172,15 +1568,30 @@ export default function App() {
                     if (e.target.classList.contains('port') || e.target.classList.contains('resize-handle')) return;
                     e.stopPropagation();
 
-                    setSelectedNodeId(node.id);
+                    let nextSelection = [...selectedNodeIds];
+                    if (e.shiftKey) {
+                      if (nextSelection.includes(node.id)) {
+                        nextSelection = nextSelection.filter((id) => id !== node.id);
+                      } else {
+                        nextSelection.push(node.id);
+                      }
+                    } else {
+                      if (!nextSelection.includes(node.id)) {
+                        nextSelection = [node.id];
+                      }
+                    }
+                    setSelectedNodeIds(nextSelection);
                     setSelectedConnectionId(null);
 
                     setDraggedNodeId(node.id);
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    setDragOffset({
-                      x: (e.clientX - rect.left) / zoom,
-                      y: (e.clientY - rect.top) / zoom
-                    });
+                    const canvasRect = canvasRef.current.getBoundingClientRect();
+                    const initialMouseX = (e.clientX - canvasRect.left - panX) / zoom;
+                    const initialMouseY = (e.clientY - canvasRect.top - panY) / zoom;
+                    setDragStartMouse({ x: initialMouseX, y: initialMouseY });
+
+                    const activeDragNodes = nodes.filter((n) => nextSelection.includes(n.id));
+                    setDragStartNodes(activeDragNodes.map((n) => ({ id: n.id, x: n.x, y: n.y })));
+                    setDraggedNodesDelta({ dx: 0, dy: 0 });
                   }}
                 >
                   {/* Connection ports handles */}
@@ -1275,18 +1686,45 @@ export default function App() {
                             {def.isEnum ? 'No values' : 'No attributes'}
                           </span>
                         )}
-                        {node.attributes.map((attr) => (
-                          <div
-                            key={attr.id}
-                            className={`uml-node-item ${attr.isStatic ? 'uml-static' : ''}`}
-                          >
-                            {def.isEnum
-                              ? attr.name
-                              : `${attr.isDerived ? '/' : ''}${attr.visibility} ${attr.name}: ${attr.type}${
-                                  attr.defaultValue ? ` = ${attr.defaultValue}` : ''
-                                }${attr.property ? ` {${attr.property}}` : ''}`}
-                          </div>
-                        ))}
+                        {node.attributes.map((attr) => {
+                          const attrStr = def.isEnum
+                            ? attr.name
+                            : `${attr.isDerived ? '/' : ''}${attr.visibility} ${attr.name}: ${attr.type}${
+                                attr.defaultValue ? ` = ${attr.defaultValue}` : ''
+                              }${attr.property ? ` {${attr.property}}` : ''}`;
+
+                          const isEditing = inlineAttrEdit && inlineAttrEdit.nodeId === node.id && inlineAttrEdit.attrId === attr.id;
+
+                          return (
+                            <div
+                              key={attr.id}
+                              className={`uml-node-item ${attr.isStatic ? 'uml-static' : ''}`}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                setInlineAttrEdit({ nodeId: node.id, attrId: attr.id });
+                              }}
+                            >
+                              {isEditing ? (
+                                <input
+                                  className="inline-name-input"
+                                  style={{ textAlign: 'left' }}
+                                  defaultValue={attrStr}
+                                  autoFocus
+                                  onFocus={(evt) => evt.target.select()}
+                                  onBlur={(evt) => handleInlineAttributeSubmit(node.id, attr.id, evt.target.value)}
+                                  onKeyDown={(evt) => {
+                                    if (evt.key === 'Enter') evt.target.blur();
+                                    if (evt.key === 'Escape') setInlineAttrEdit(null);
+                                  }}
+                                  onMouseDown={(evt) => evt.stopPropagation()}
+                                  onClick={(evt) => evt.stopPropagation()}
+                                />
+                              ) : (
+                                attrStr
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
 
                       {/* Methods area (hidden for enumerations) */}
@@ -1297,17 +1735,45 @@ export default function App() {
                               No methods
                             </span>
                           )}
-                          {node.methods.map((meth) => (
-                            <div
-                              key={meth.id}
-                              className={`uml-node-item ${meth.isStatic ? 'uml-static' : ''} ${
-                                meth.isAbstract ? 'uml-abstract' : ''
-                              }`}
-                            >
-                              {meth.visibility} {meth.name}({meth.parameters}): {meth.returnType}
-                              {meth.property ? ` {${meth.property}}` : ''}
-                            </div>
-                          ))}
+                          {node.methods.map((meth) => {
+                            const methStr = `${meth.visibility} ${meth.name}(${meth.parameters}): ${meth.returnType}${
+                              meth.property ? ` {${meth.property}}` : ''
+                            }`;
+
+                            const isEditing = inlineMethEdit && inlineMethEdit.nodeId === node.id && inlineMethEdit.methId === meth.id;
+
+                            return (
+                              <div
+                                key={meth.id}
+                                className={`uml-node-item ${meth.isStatic ? 'uml-static' : ''} ${
+                                  meth.isAbstract ? 'uml-abstract' : ''
+                                }`}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  setInlineMethEdit({ nodeId: node.id, methId: meth.id });
+                                }}
+                              >
+                                {isEditing ? (
+                                  <input
+                                    className="inline-name-input"
+                                    style={{ textAlign: 'left' }}
+                                    defaultValue={methStr}
+                                    autoFocus
+                                    onFocus={(evt) => evt.target.select()}
+                                    onBlur={(evt) => handleInlineMethodSubmit(node.id, meth.id, evt.target.value)}
+                                    onKeyDown={(evt) => {
+                                      if (evt.key === 'Enter') evt.target.blur();
+                                      if (evt.key === 'Escape') setInlineMethEdit(null);
+                                    }}
+                                    onMouseDown={(evt) => evt.stopPropagation()}
+                                    onClick={(evt) => evt.stopPropagation()}
+                                  />
+                                ) : (
+                                  methStr
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </>
@@ -1494,6 +1960,30 @@ export default function App() {
                 }}
               />
             )}
+
+            {/* Lasso select preview shape */}
+            {lasso && (
+              <div
+                className="lasso-select"
+                style={{
+                  left: `${Math.min(lasso.startX, lasso.currentX)}px`,
+                  top: `${Math.min(lasso.startY, lasso.currentY)}px`,
+                  width: `${Math.abs(lasso.currentX - lasso.startX)}px`,
+                  height: `${Math.abs(lasso.currentY - lasso.startY)}px`
+                }}
+              />
+            )}
+
+            {/* Smart alignment guidelines */}
+            {activeGuidelines.map((g, idx) => (
+              <div
+                key={idx}
+                className={`smart-guide-line smart-guide-line--${g.type}`}
+                style={{
+                  [g.type === 'h' ? 'top' : 'left']: `${g.val}px`
+                }}
+              />
+            ))}
           </div>
 
           {/* Welcome overlay when canvas is empty and no tool active */}

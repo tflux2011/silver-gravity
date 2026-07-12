@@ -145,3 +145,135 @@ export const getFitDimensions = (node, def) => {
   return { width: calculatedWidth, height: calculatedHeight };
 };
 
+// Generate vertices for orthogonal connections.
+export const getOrthogonalVertices = (start, end, fromPort, toPort, midOffset) => {
+  const x1 = start.x;
+  const y1 = start.y;
+  const x2 = end.x;
+  const y2 = end.y;
+
+  if (fromPort === 'right' && toPort === 'left') {
+    const midX = midOffset != null ? midOffset : (x1 + x2) / 2;
+    return [
+      { x: x1, y: y1 },
+      { x: midX, y: y1 },
+      { x: midX, y: y2 },
+      { x: x2, y: y2 }
+    ];
+  }
+  if (fromPort === 'left' && toPort === 'right') {
+    const midX = midOffset != null ? midOffset : (x1 + x2) / 2;
+    return [
+      { x: x1, y: y1 },
+      { x: midX, y: y1 },
+      { x: midX, y: y2 },
+      { x: x2, y: y2 }
+    ];
+  }
+  if (fromPort === 'bottom' && toPort === 'top') {
+    const midY = midOffset != null ? midOffset : (y1 + y2) / 2;
+    return [
+      { x: x1, y: y1 },
+      { x: x1, y: midY },
+      { x: x2, y: midY },
+      { x: x2, y: y2 }
+    ];
+  }
+  if (fromPort === 'top' && toPort === 'bottom') {
+    const midY = midOffset != null ? midOffset : (y1 + y2) / 2;
+    return [
+      { x: x1, y: y1 },
+      { x: x1, y: midY },
+      { x: x2, y: midY },
+      { x: x2, y: y2 }
+    ];
+  }
+
+  // Default 2-step layout when the port pair is not directly opposed.
+  if (fromPort === 'top' || fromPort === 'bottom') {
+    return [
+      { x: x1, y: y1 },
+      { x: x1, y: y2 },
+      { x: x2, y: y2 }
+    ];
+  }
+  return [
+    { x: x1, y: y1 },
+    { x: x2, y: y1 },
+    { x: x2, y: y2 }
+  ];
+};
+
+// Calculate orthogonal path strings with small bridge jumps over perpendicular lines.
+export const calculateConnectionPathWithJumps = (conn, allConnections, getPortCoords) => {
+  const start = getPortCoords(conn.fromNodeId, conn.fromPort);
+  const end = getPortCoords(conn.toNodeId, conn.toPort);
+  const vertices = getOrthogonalVertices(start, end, conn.fromPort, conn.toPort, conn.midOffset);
+
+  // Find all other connections' vertical segments to check for intersection
+  const otherVerticalSegments = [];
+  allConnections.forEach((other) => {
+    if (other.id === conn.id) return;
+    const otherStart = getPortCoords(other.fromNodeId, other.fromPort);
+    const otherEnd = getPortCoords(other.toNodeId, other.toPort);
+    const otherVertices = getOrthogonalVertices(otherStart, otherEnd, other.fromPort, other.toPort, other.midOffset);
+    for (let i = 0; i < otherVertices.length - 1; i++) {
+      const p1 = otherVertices[i];
+      const p2 = otherVertices[i + 1];
+      if (Math.abs(p1.x - p2.x) < 0.1) {
+        otherVerticalSegments.push({
+          x: p1.x,
+          y1: Math.min(p1.y, p2.y),
+          y2: Math.max(p1.y, p2.y)
+        });
+      }
+    }
+  });
+
+  let pathStr = `M ${vertices[0].x} ${vertices[0].y}`;
+  for (let i = 0; i < vertices.length - 1; i++) {
+    const p1 = vertices[i];
+    const p2 = vertices[i + 1];
+
+    if (Math.abs(p1.y - p2.y) < 0.1) {
+      // Horizontal segment: cross check with vertical lines
+      const y = p1.y;
+      const xStart = p1.x;
+      const xEnd = p2.x;
+      const xMin = Math.min(xStart, xEnd);
+      const xMax = Math.max(xStart, xEnd);
+
+      const intersections = [];
+      otherVerticalSegments.forEach((vSeg) => {
+        // Cross segment within bounds, skipping points close to ends
+        if (vSeg.x > xMin + 6 && vSeg.x < xMax - 6 && y > vSeg.y1 + 6 && y < vSeg.y2 - 6) {
+          intersections.push(vSeg.x);
+        }
+      });
+
+      if (intersections.length > 0) {
+        if (xStart < xEnd) {
+          intersections.sort((a, b) => a - b);
+        } else {
+          intersections.sort((a, b) => b - a);
+        }
+
+        intersections.forEach((xInt) => {
+          const jumpRadius = 4;
+          const sweepFlag = 1; // arc up
+          if (xStart < xEnd) {
+            pathStr += ` H ${xInt - jumpRadius} A ${jumpRadius} ${jumpRadius} 0 0 ${sweepFlag} ${xInt + jumpRadius} ${y}`;
+          } else {
+            pathStr += ` H ${xInt + jumpRadius} A ${jumpRadius} ${jumpRadius} 0 0 ${sweepFlag} ${xInt - jumpRadius} ${y}`;
+          }
+        });
+      }
+      pathStr += ` H ${xEnd}`;
+    } else {
+      pathStr += ` V ${p2.y}`;
+    }
+  }
+
+  return pathStr;
+};
+

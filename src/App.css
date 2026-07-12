@@ -941,3 +941,44 @@ button:active, .btn-text:active, .btn-icon:active {
   border: 1px solid var(--border-normal);
   color: var(--text-primary);
 }
+
+/* Lasso Selection Rectangle */
+.lasso-select {
+  position: absolute;
+  border: 1px dashed var(--border-focus);
+  background-color: rgba(245, 158, 11, 0.06);
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* Alignment Overlay Guidelines */
+.smart-guide-line {
+  position: absolute;
+  border: none;
+  pointer-events: none;
+  z-index: 100;
+}
+.smart-guide-line--h {
+  border-top: 1.5px dashed var(--border-focus);
+  width: 100%;
+  left: 0;
+}
+.smart-guide-line--v {
+  border-left: 1.5px dashed var(--border-focus);
+  height: 100%;
+  top: 0;
+}
+
+/* Inline double-click editors inside UML Node Sections */
+.inline-item-input {
+  background-color: var(--bg-control);
+  border: 1px solid var(--border-focus) !important;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: var(--space-4) var(--space-8);
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
