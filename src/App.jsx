@@ -122,6 +122,9 @@ export default function App() {
   // Lasso select state — user drags on empty space to select multiple elements
   const [lasso, setLasso] = useState(null); // { startX, startY, currentX, currentY }
 
+  // Active alignment guidelines to display
+  const [activeGuidelines, setActiveGuidelines] = useState([]); // Array of { type: 'h'|'v', val }
+
   // Document-level resize handler (bypasses React event delegation issues)
   useEffect(() => {
     if (!resizing) return;
