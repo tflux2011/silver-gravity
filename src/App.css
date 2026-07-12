@@ -26,26 +26,41 @@
 .activity-bar-bottom {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
+
+.activity-separator {
+  width: 24px;
+  height: 1px;
+  background-color: var(--border-dim);
+  margin: 4px auto;
 }
 
 .activity-btn {
-  width: 44px;
+  width: 100%;
   height: 44px;
   padding: 0 !important;
   display: flex !important;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  color: var(--text-secondary) !important;
+  border-radius: 0;
+  border-left: 2px solid transparent;
+  color: var(--text-dim) !important;
+  opacity: 0.6;
+  transition: opacity 0.1s ease;
 }
 .activity-btn:hover {
+  opacity: 1;
   color: var(--text-primary) !important;
-  background-color: var(--bg-hover) !important;
+  background-color: transparent !important;
 }
-.activity-btn:hover svg {
-  color: var(--text-accent);
+.activity-btn--active {
+  opacity: 1;
+  color: var(--text-primary) !important;
+  background-color: transparent !important;
+  border-left: 2px solid var(--text-accent) !important;
 }
 
 /* Main column sits to the right of the activity bar */
@@ -153,6 +168,80 @@ button:active, .btn-text:active, .btn-icon:active {
   cursor: grabbing;
 }
 
+.canvas--tool-active {
+  cursor: crosshair !important;
+}
+
+/* Draw-to-size preview rectangle */
+.draw-preview {
+  position: absolute;
+  border: 2px dashed var(--text-accent);
+  background-color: rgba(56, 189, 248, 0.08);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.draw-preview--usecase {
+  border-radius: 50%;
+}
+
+.draw-preview--actor {
+  border-radius: 50%;
+  border-style: dotted;
+}
+
+.draw-preview--note {
+  border-radius: 0;
+  border-style: dashed;
+  background-color: rgba(250, 204, 21, 0.1);
+  border-color: #facc15;
+}
+
+/* Welcome overlay for empty canvas */
+.canvas-welcome {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.welcome-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+  letter-spacing: -0.02em;
+  font-family: 'Caveat', 'Dancing Script', cursive;
+}
+
+.welcome-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+}
+
+.welcome-shortcut {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.welcome-shortcut kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background-color: var(--bg-element);
+  border: 1px solid var(--border-normal);
+  border-radius: 4px;
+  margin: 0 2px;
+}
+
 .canvas-workspace {
   position: absolute;
   top: 0;
@@ -182,6 +271,16 @@ button:active, .btn-text:active, .btn-icon:active {
   z-index: 1;
 }
 
+.connections-handles-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
 .connection-line {
   stroke: var(--border-normal);
   stroke-width: 1.5px;
@@ -190,11 +289,38 @@ button:active, .btn-text:active, .btn-icon:active {
 
 .connection-line.selected {
   stroke: var(--border-focus);
+  cursor: col-resize;
 }
 
 .connection-line.drawing {
-  stroke: var(--border-accent);
-  stroke-dasharray: 4;
+  stroke: #4a9eff;
+  stroke-width: 2px;
+  stroke-dasharray: 6 3;
+}
+
+/* Connector adjustment handles (Lucidchart-style) */
+.connector-handle {
+  pointer-events: all;
+}
+.connector-handle--endpoint {
+  fill: #22c55e;
+  stroke: #16a34a;
+  stroke-width: 1.5px;
+  cursor: move;
+  transition: r 0.1s ease;
+}
+.connector-handle--endpoint:hover {
+  r: 7;
+}
+.connector-handle--midpoint {
+  fill: #4a9eff;
+  stroke: #2680eb;
+  stroke-width: 1.5px;
+  rx: 2;
+  ry: 2;
+}
+.connector-handle--midpoint:hover {
+  fill: #1a6ddb;
 }
 
 /* Relationship annotations */
@@ -254,10 +380,73 @@ button:active, .btn-text:active, .btn-icon:active {
   cursor: move;
   display: flex;
   flex-direction: column;
+  overflow: visible;
 }
 
 .uml-node.selected {
   border: 1px solid var(--border-focus) !important;
+}
+
+/* Resize handles — invisible corner hotspots, cursor-only */
+.resize-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: transparent;
+  border: none;
+  z-index: 6;
+}
+.resize-handle--top-left {
+  top: -6px;
+  left: -6px;
+  cursor: nwse-resize;
+}
+.resize-handle--top-right {
+  top: -6px;
+  right: -6px;
+  cursor: nesw-resize;
+}
+.resize-handle--bottom-left {
+  bottom: -6px;
+  left: -6px;
+  cursor: nesw-resize;
+}
+.resize-handle--bottom-right {
+  bottom: -6px;
+  right: -6px;
+  cursor: nwse-resize;
+}
+.resize-handle--top {
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 16px);
+  height: 10px;
+  cursor: ns-resize;
+}
+.resize-handle--bottom {
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 16px);
+  height: 10px;
+  cursor: ns-resize;
+}
+.resize-handle--left {
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: calc(100% - 16px);
+  cursor: ew-resize;
+}
+.resize-handle--right {
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: calc(100% - 16px);
+  cursor: ew-resize;
 }
 
 .uml-node-header {
@@ -272,7 +461,7 @@ button:active, .btn-text:active, .btn-icon:active {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-4);
 }
 
 /* UML stereotype guillemets line (interface / abstract / enumeration) */
@@ -288,11 +477,27 @@ button:active, .btn-text:active, .btn-icon:active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--space-8);
 }
 
 .uml-node-name-row.is-italic {
   font-style: italic;
+}
+
+/* Inline name editing on double-click */
+.inline-name-input {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: center;
+  padding: 1px 4px;
+  outline: none;
+  width: 100%;
+  min-width: 40px;
+  box-sizing: border-box;
 }
 
 .uml-node-section {
@@ -502,17 +707,19 @@ button:active, .btn-text:active, .btn-icon:active {
   color: var(--text-primary);
 }
 
-/* Connection Ports - Tiny square shapes aligned precisely on the node border */
+/* Connection Ports — Lucidchart-style: visible on hover, diamond-shaped, easy to grab */
 .port {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  background-color: var(--bg-app);
-  border: 1px solid var(--border-normal);
-  z-index: 5;
+  width: 12px;
+  height: 12px;
+  background-color: #4a9eff;
+  border: 2px solid #2680eb;
+  z-index: 10;
   cursor: crosshair;
   opacity: 0;
-  border-radius: 0 !important; /* Square ports */
+  border-radius: 2px;
+  transform: rotate(45deg);
+  transition: opacity 0.15s ease, transform 0.15s ease, background-color 0.1s ease;
 }
 
 .uml-node:hover .port,
@@ -521,28 +728,33 @@ button:active, .btn-text:active, .btn-icon:active {
 }
 
 .port:hover {
-  background-color: var(--border-focus);
-  border-color: var(--text-primary);
+  background-color: #1a6ddb;
+  border-color: #0d5cbf;
+  transform: rotate(45deg) scale(1.3);
+}
+
+.uml-node.connection-target {
+  box-shadow: 0 0 0 2px #4a9eff;
 }
 
 .port.port-top {
-  top: -4px;
-  left: calc(50% - 4px);
+  top: -7px;
+  left: calc(50% - 6px);
 }
 
 .port.port-right {
-  right: -4px;
-  top: calc(50% - 4px);
+  right: -7px;
+  top: calc(50% - 6px);
 }
 
 .port.port-bottom {
-  bottom: -4px;
-  left: calc(50% - 4px);
+  bottom: -7px;
+  left: calc(50% - 6px);
 }
 
 .port.port-left {
-  left: -4px;
-  top: calc(50% - 4px);
+  left: -7px;
+  top: calc(50% - 6px);
 }
 
 /* Sidebar Configuration Panel */
@@ -669,7 +881,7 @@ button:active, .btn-text:active, .btn-icon:active {
 .mini-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-4);
   font-size: 10px;
   color: var(--text-secondary);
   font-family: var(--font-mono);

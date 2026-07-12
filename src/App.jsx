@@ -37,7 +37,7 @@ import {
   HOSPITAL_TEMPLATE_NODES,
   HOSPITAL_TEMPLATE_CONNECTIONS
 } from './model/samples';
-import { portCoordsFor, orthogonalPath, snapTo8 } from './model/geometry';
+import { portCoordsFor, orthogonalPath, getElbowMidpoint, snapTo8, getFitDimensions } from './model/geometry';
 import { useHistory } from './history/useHistory';
 import ConnectorMarkers from './components/ConnectorMarkers';
 import { NodeDeleteButton, ShortcutHelp } from './components/SharedControls';
@@ -55,8 +55,8 @@ export default function App() {
   // Single undoable document. Transient UI state (selection, drag, pan) is
   // deliberately kept outside history so undo/redo only affect diagram data.
   const { document: doc, set: setDoc, undo, redo, canUndo, canRedo } = useHistory({
-    nodes: INITIAL_NODES,
-    connections: INITIAL_CONNECTIONS
+    nodes: [],
+    connections: []
   });
   const nodes = doc.nodes;
   const connections = doc.connections;
@@ -98,6 +98,140 @@ export default function App() {
 
   const [drawingConnection, setDrawingConnection] = useState(null);
 
+  // Dragging a connector handle (endpoint or midpoint)
+  // { connId, handleType: 'start'|'end'|'mid', startMouseX, startMouseY, origValue }
+  const [draggingHandle, setDraggingHandle] = useState(null);
+
+  // Active placement tool — when set, next canvas click places that element type.
+  const [activeTool, setActiveTool] = useState(null);
+
+  // Inline name editing — double-click a node name on the canvas to edit
+  const [inlineEditId, setInlineEditId] = useState(null);
+
+  // Drawing state — user drags to define element size
+  const [drawing, setDrawing] = useState(null); // { startX, startY, currentX, currentY }
+
+  // Resizing state — user drags a handle to resize a node
+  const [resizing, setResizing] = useState(null); // { nodeId, handle, startX, startY, origX, origY, origW, origH }
+
+  // Document-level resize handler (bypasses React event delegation issues)
+  useEffect(() => {
+    if (!resizing) return;
+    const onMove = (e) => {
+      const dx = (e.clientX - resizing.startX) / zoom;
+      const dy = (e.clientY - resizing.startY) / zoom;
+      const handle = resizing.handle;
+      let newX = resizing.origX;
+      let newY = resizing.origY;
+      let newW = resizing.origW;
+      let newH = resizing.origH;
+
+      if (handle.includes('right')) newW = Math.max(60, resizing.origW + dx);
+      if (handle.includes('bottom')) newH = Math.max(40, resizing.origH + dy);
+      if (handle.includes('left')) {
+        newW = Math.max(60, resizing.origW - dx);
+        newX = resizing.origX + (resizing.origW - newW);
+      }
+      if (handle.includes('top')) {
+        newH = Math.max(40, resizing.origH - dy);
+        newY = resizing.origY + (resizing.origH - newH);
+      }
+
+      setNodes((prev) =>
+        prev.map((n) =>
+          n.id === resizing.nodeId
+            ? { ...n, x: snapTo8(newX), y: snapTo8(newY), width: snapTo8(newW), height: snapTo8(newH) }
+            : n
+        )
+      );
+    };
+    const onUp = () => setResizing(null);
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+  }, [resizing, zoom, setNodes]);
+
+  // Document-level handler for dragging connector handles (endpoints/midpoints)
+  const connectionsRef = useRef(connections);
+  connectionsRef.current = connections;
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
+  const draggingHandleRef = useRef(draggingHandle);
+  useEffect(() => { draggingHandleRef.current = draggingHandle; }, [draggingHandle]);
+
+  useEffect(() => {
+    if (!draggingHandle) return;
+    const onMove = (e) => {
+      const dh = draggingHandleRef.current;
+      if (!dh) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const cursorX = (e.clientX - rect.left - panX) / zoom;
+      const cursorY = (e.clientY - rect.top - panY) / zoom;
+
+      if (dh.handleType === 'mid') {
+        const axis = dh.axis;
+        const newVal = axis === 'x' ? cursorX : cursorY;
+        updateConnection(dh.connId, { midOffset: snapTo8(newVal) });
+      } else if (dh.handleType === 'start' || dh.handleType === 'end') {
+        setDraggingHandle((prev) => ({ ...prev, cursorX, cursorY }));
+      }
+    };
+    const onUp = (e) => {
+      const dh = draggingHandleRef.current;
+      if (!dh) return;
+      if (dh.handleType === 'start' || dh.handleType === 'end') {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const cursorX = (e.clientX - rect.left - panX) / zoom;
+        const cursorY = (e.clientY - rect.top - panY) / zoom;
+        const conn = connectionsRef.current.find((c) => c.id === dh.connId);
+        if (conn) {
+          const otherNodeId = dh.handleType === 'start' ? conn.toNodeId : conn.fromNodeId;
+          let bestNode = null;
+          let bestPort = null;
+          let bestDist = Infinity;
+          for (const n of nodesRef.current) {
+            const el = nodeRefs.current[n.id];
+            if (!el) continue;
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            const pad = 20;
+            if (cursorX >= n.x - pad && cursorX <= n.x + w + pad &&
+                cursorY >= n.y - pad && cursorY <= n.y + h + pad) {
+              for (const p of ['top', 'right', 'bottom', 'left']) {
+                const coords = portCoordsFor(n, p, w, h);
+                const dist = Math.hypot(cursorX - coords.x, cursorY - coords.y);
+                if (dist < bestDist) {
+                  bestDist = dist;
+                  bestNode = n;
+                  bestPort = p;
+                }
+              }
+            }
+          }
+          if (bestNode && bestNode.id !== otherNodeId) {
+            const update = dh.handleType === 'start'
+              ? { fromNodeId: bestNode.id, fromPort: bestPort, midOffset: undefined }
+              : { toNodeId: bestNode.id, toPort: bestPort, midOffset: undefined };
+            updateConnection(conn.id, update);
+          }
+        }
+      }
+      setDraggingHandle(null);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    // Only re-register when dragging starts/stops (boolean), not on every cursor update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!draggingHandle, zoom, panX, panY]);
+
   // Controlled input states for sidebar renaming
   const [editingName, setEditingName] = useState('');
   const [nameError, setNameError] = useState('');
@@ -117,7 +251,7 @@ export default function App() {
       setEditingName('');
       setNameError('');
     }
-  }, [selectedNodeId, nodes]);
+  }, [selectedNodeId, nodes, selectedNode]);
 
   const canvasRef = useRef(null);
   const nodeRefs = useRef({});
@@ -194,6 +328,37 @@ export default function App() {
         e.preventDefault();
         handleOpen();
       }
+
+      // Cmd/Ctrl + N to add a new class
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        addNode('class');
+      }
+
+      // Arrow keys nudging for selected node
+      if (selectedNodeId) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setNodes((prev) =>
+            prev.map((n) => (n.id === selectedNodeId ? { ...n, y: snapTo8(n.y - 8) } : n))
+          );
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setNodes((prev) =>
+            prev.map((n) => (n.id === selectedNodeId ? { ...n, y: snapTo8(n.y + 8) } : n))
+          );
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setNodes((prev) =>
+            prev.map((n) => (n.id === selectedNodeId ? { ...n, x: snapTo8(n.x - 8) } : n))
+          );
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          setNodes((prev) =>
+            prev.map((n) => (n.id === selectedNodeId ? { ...n, x: snapTo8(n.x + 8) } : n))
+          );
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -233,7 +398,7 @@ export default function App() {
               setDoc({ nodes: parsed.nodes, connections: parsed.connections });
               setFilePath(file.name);
             }
-          } catch (err) {
+          } catch {
             alert('Invalid JSON file format.');
           }
         };
@@ -332,12 +497,12 @@ export default function App() {
     setSampleMenuOpen(false);
   };
 
-  const addNode = (type = 'class') => {
+  const addNode = (type = 'class', position, size) => {
     const def = elementDef(type);
 
-    // Generate element position relative to current viewport
-    const x = snapTo8(Math.max(80, -panX + 200));
-    const y = snapTo8(Math.max(80, -panY + 150));
+    // Place at given position or fall back to viewport-relative default
+    const x = position ? snapTo8(position.x) : snapTo8(Math.max(80, -panX + 200));
+    const y = position ? snapTo8(position.y) : snapTo8(Math.max(80, -panY + 150));
 
     // Disallow creating multiple elements with the same default name
     const baseName = `New${def.label.replace(/\s+/g, '')}`;
@@ -356,6 +521,8 @@ export default function App() {
       name,
       x,
       y,
+      ...(size && size.width > 60 ? { width: snapTo8(size.width) } : {}),
+      ...(size && size.height > 40 ? { height: snapTo8(size.height) } : {}),
       attributes: seed.attributes,
       methods: seed.methods,
       text: seed.text || ''
@@ -411,6 +578,16 @@ export default function App() {
 
   const updateNodeCoords = (nodeId, x, y) => {
     setNodes(nodes.map((n) => (n.id === nodeId ? { ...n, x: snapTo8(x), y: snapTo8(y) } : n)));
+  };
+
+  const handleFitContent = (nodeId) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const def = elementDef(node.type);
+    const { width, height } = getFitDimensions(node, def);
+    setNodes((prev) =>
+      prev.map((n) => (n.id === nodeId ? { ...n, width, height } : n))
+    );
   };
 
   // Attributes / Methods editors
@@ -499,7 +676,7 @@ export default function App() {
   };
 
   const updateConnection = (connId, fields) => {
-    setConnections(connections.map((c) => (c.id === connId ? { ...c, ...fields } : c)));
+    setConnections((prev) => prev.map((c) => (c.id === connId ? { ...c, ...fields } : c)));
   };
 
   // Flip a relationship's direction: swap source/target endpoints together with
@@ -528,21 +705,40 @@ export default function App() {
 
   // Canvas Drag Panning
   const handleCanvasMouseDown = (e) => {
-    // If user clicked standard elements/ports, ignore canvas panning
+    // If user clicked standard elements/ports/connectors, ignore canvas panning
     if (
       e.target.closest('.uml-node') ||
       e.target.closest('.port') ||
       e.target.closest('button') ||
-      e.target.closest('.sidebar')
+      e.target.closest('.sidebar') ||
+      e.target.closest('.connector-handle') ||
+      (e.target.tagName === 'path' && e.target.getAttribute('stroke') === 'transparent')
     ) {
       return;
     }
+
+    // Start drawing a new element when a tool is active
+    if (activeTool) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - panX) / zoom;
+      const y = (e.clientY - rect.top - panY) / zoom;
+      setDrawing({ startX: x, startY: y, currentX: x, currentY: y });
+      return;
+    }
+
     setIsPanning(true);
     setPanStart({ x: e.clientX - panX, y: e.clientY - panY });
   };
 
   const handleCanvasMouseMove = (e) => {
-    if (isPanning) {
+    if (resizing) return; // Handled by document-level listener
+    if (draggingHandle) return; // Handled by document-level listener
+    if (drawing) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - panX) / zoom;
+      const y = (e.clientY - rect.top - panY) / zoom;
+      setDrawing((d) => ({ ...d, currentX: x, currentY: y }));
+    } else if (isPanning) {
       setPanX(e.clientX - panStart.x);
       setPanY(e.clientY - panStart.y);
     } else if (draggedNodeId) {
@@ -560,6 +756,20 @@ export default function App() {
   };
 
   const handleCanvasMouseUp = () => {
+    if (resizing) return; // Handled by document-level listener
+    if (draggingHandle) return; // Handled by document-level listener
+
+    // Finalize element drawing
+    if (drawing && activeTool) {
+      const x = Math.min(drawing.startX, drawing.currentX);
+      const y = Math.min(drawing.startY, drawing.currentY);
+      const w = Math.abs(drawing.currentX - drawing.startX);
+      const h = Math.abs(drawing.currentY - drawing.startY);
+      addNode(activeTool, { x, y }, { width: w, height: h });
+      setDrawing(null);
+      return;
+    }
+
     // Commit a completed node drag as a single undoable change.
     if (draggedNodeId && livePos) {
       updateNodeCoords(draggedNodeId, livePos.x, livePos.y);
@@ -580,10 +790,10 @@ export default function App() {
     return portCoordsFor(effectiveNode(node), portName, width, height);
   };
 
-  const calculateOrthogonalPath = (fromId, fromPort, toId, toPort) => {
+  const calculateOrthogonalPath = (fromId, fromPort, toId, toPort, midOffset) => {
     const start = getPortCoords(fromId, fromPort);
     const end = getPortCoords(toId, toPort);
-    return orthogonalPath(start, end, fromPort, toPort);
+    return orthogonalPath(start, end, fromPort, toPort, midOffset);
   };
 
   // Render variables
@@ -595,28 +805,64 @@ export default function App() {
       {/* VS Code-style Activity Bar (left, full height) */}
       <nav className="activity-bar" aria-label="UML elements">
         <div className="activity-bar-top">
-          {PALETTE_ITEMS.map((type) => {
+          {/* Structure elements */}
+          {['class', 'interface', 'abstract', 'enumeration'].map((type) => {
             const def = elementDef(type);
             const Icon = TYPE_ICONS[type] || Box;
             return (
               <button
                 key={type}
-                className="activity-btn"
-                onClick={() => addNode(type)}
+                className={`activity-btn ${activeTool === type ? 'activity-btn--active' : ''}`}
+                onClick={() => setActiveTool(activeTool === type ? null : type)}
                 title={`Add ${def.label}`}
                 aria-label={`Add ${def.label}`}
               >
-                <Icon size={23} strokeWidth={1.5} />
+                <Icon size={21} strokeWidth={1.5} />
               </button>
             );
           })}
+          <div className="activity-separator" />
+          {/* Behavior elements */}
+          {['actor', 'usecase'].map((type) => {
+            const def = elementDef(type);
+            const Icon = TYPE_ICONS[type] || Box;
+            return (
+              <button
+                key={type}
+                className={`activity-btn ${activeTool === type ? 'activity-btn--active' : ''}`}
+                onClick={() => setActiveTool(activeTool === type ? null : type)}
+                title={`Add ${def.label}`}
+                aria-label={`Add ${def.label}`}
+              >
+                <Icon size={21} strokeWidth={1.5} />
+              </button>
+            );
+          })}
+          <div className="activity-separator" />
+          {/* Annotation */}
+          {['note'].map((type) => {
+            const def = elementDef(type);
+            const Icon = TYPE_ICONS[type] || Box;
+            return (
+              <button
+                key={type}
+                className={`activity-btn ${activeTool === type ? 'activity-btn--active' : ''}`}
+                onClick={() => setActiveTool(activeTool === type ? null : type)}
+                title={`Add ${def.label}`}
+                aria-label={`Add ${def.label}`}
+              >
+                <Icon size={21} strokeWidth={1.5} />
+              </button>
+            );
+          })}
+          <div className="activity-separator" />
         </div>
         <div className="activity-bar-bottom">
           <button className="activity-btn" title="Settings" aria-label="Settings">
-            <Settings size={23} strokeWidth={1.5} />
+            <Settings size={21} strokeWidth={1.5} />
           </button>
           <button className="activity-btn" title="Account" aria-label="Account">
-            <UserCircle size={23} strokeWidth={1.5} />
+            <UserCircle size={21} strokeWidth={1.5} />
           </button>
         </div>
       </nav>
@@ -715,14 +961,14 @@ export default function App() {
 
         {/* Canvas Panel */}
         <div
-          className="canvas-container"
+          className={`canvas-container ${activeTool ? 'canvas--tool-active' : ''}`}
           ref={canvasRef}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
           onDoubleClick={(e) => {
-            // Double click on canvas empty space spawns node
-            if (e.target === canvasRef.current || e.target.tagName === 'rect') {
+            // Double click on canvas empty space spawns class (legacy shortcut)
+            if (!activeTool && (e.target === canvasRef.current || e.target.tagName === 'rect')) {
               addNode('class');
             }
           }}
@@ -747,7 +993,7 @@ export default function App() {
 
               {/* Draw established connection lines */}
               {connections.map((c) => {
-                const pathStr = calculateOrthogonalPath(c.fromNodeId, c.fromPort, c.toNodeId, c.toPort);
+                const pathStr = calculateOrthogonalPath(c.fromNodeId, c.fromPort, c.toNodeId, c.toPort, c.midOffset);
                 const isSelected = selectedConnectionId === c.id;
                 const marks = resolveMarkers(c);
                 const markerAttrs = {};
@@ -792,11 +1038,22 @@ export default function App() {
                       stroke="transparent"
                       strokeWidth="10"
                       fill="none"
-                      style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+                      style={{ cursor: isSelected ? 'col-resize' : 'pointer', pointerEvents: 'stroke' }}
+                      onMouseDown={(e) => {
+                        if (isSelected) {
+                          // Start midpoint drag directly from the line
+                          e.stopPropagation();
+                          const elbow = getElbowMidpoint(startCoords, endCoords, c.fromPort, c.toPort, c.midOffset);
+                          if (elbow.axis) {
+                            setDraggingHandle({ connId: c.id, handleType: 'mid', axis: elbow.axis });
+                          }
+                        }
+                      }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedConnectionId(c.id);
                         setSelectedNodeId(null);
+                        setActiveTool(null);
                       }}
                     />
 
@@ -805,6 +1062,7 @@ export default function App() {
                       d={pathStr}
                       className={`connection-line ${isSelected ? 'selected' : ''}`}
                       strokeDasharray={marks.dashed ? '5,5' : 'none'}
+                      style={{ pointerEvents: 'none' }}
                       {...markerAttrs}
                     />
 
@@ -838,6 +1096,7 @@ export default function App() {
                         {c.roleTo}
                       </text>
                     )}
+
                   </g>
                 );
               })}
@@ -849,6 +1108,7 @@ export default function App() {
                   className="connection-line drawing"
                 />
               )}
+
             </svg>
 
             {/* Draggable UML Nodes */}
@@ -864,11 +1124,52 @@ export default function App() {
                   ref={(el) => {
                     nodeRefs.current[node.id] = el;
                   }}
-                  className={`uml-node uml-node--${node.type || 'class'} ${isSelected ? 'selected' : ''}`}
-                  style={{ left: `${node.x}px`, top: `${node.y}px` }}
+                  className={`uml-node uml-node--${node.type || 'class'} ${isSelected ? 'selected' : ''} ${drawingConnection && drawingConnection.fromNodeId !== node.id ? 'connection-target' : ''}`}
+                  style={{
+                    left: `${node.x}px`,
+                    top: `${node.y}px`,
+                    ...(node.width ? { width: `${node.width}px` } : {}),
+                    ...(node.height ? { minHeight: `${node.height}px` } : {})
+                  }}
+                  onMouseUp={(e) => {
+                    // Lucidchart-style: drop on node auto-connects to nearest port
+                    if (drawingConnection && drawingConnection.fromNodeId !== node.id) {
+                      e.stopPropagation();
+                      const el = nodeRefs.current[node.id];
+                      const width = el ? el.offsetWidth : 200;
+                      const height = el ? el.offsetHeight : 120;
+                      // Find nearest port to cursor
+                      const rect = canvasRef.current.getBoundingClientRect();
+                      const cursorX = (e.clientX - rect.left - panX) / zoom;
+                      const cursorY = (e.clientY - rect.top - panY) / zoom;
+                      const ports = ['top', 'right', 'bottom', 'left'];
+                      let nearestPort = 'top';
+                      let minDist = Infinity;
+                      for (const p of ports) {
+                        const coords = portCoordsFor(node, p, width, height);
+                        const dist = Math.hypot(cursorX - coords.x, cursorY - coords.y);
+                        if (dist < minDist) { minDist = dist; nearestPort = p; }
+                      }
+                      const newConnection = {
+                        id: `conn-${Date.now()}`,
+                        fromNodeId: drawingConnection.fromNodeId,
+                        fromPort: drawingConnection.fromPort,
+                        toNodeId: node.id,
+                        toPort: nearestPort,
+                        type: 'association',
+                        multiplicityFrom: '1',
+                        multiplicityTo: '1'
+                      };
+                      setConnections([...connections, newConnection]);
+                      setSelectedConnectionId(newConnection.id);
+                      setSelectedNodeId(null);
+                      setDrawingConnection(null);
+                      return;
+                    }
+                  }}
                   onMouseDown={(e) => {
-                    // Check if clicked port
-                    if (e.target.classList.contains('port')) return;
+                    // Check if clicked port or resize handle
+                    if (e.target.classList.contains('port') || e.target.classList.contains('resize-handle')) return;
                     e.stopPropagation();
 
                     setSelectedNodeId(node.id);
@@ -924,14 +1225,43 @@ export default function App() {
                   {def.shape === 'class' ? (
                     <>
                       {/* Header: stereotype + element name */}
-                      <div className="uml-node-header">
+                      <div
+                        className="uml-node-header"
+                        title="Double-click to fit to content"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleFitContent(node.id);
+                        }}
+                      >
                         <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
                         {(node.stereotype || def.stereotype) && (
                           <span className="uml-stereotype">«{node.stereotype || def.stereotype}»</span>
                         )}
                         <span className={`uml-node-name-row ${def.italicName ? 'is-italic' : ''}`}>
                           <TypeIcon size={13} strokeWidth={1.5} style={{ opacity: 0.7 }} />
-                          <span>{node.name}</span>
+                          {inlineEditId === node.id ? (
+                            <input
+                              className="inline-name-input"
+                              defaultValue={node.name}
+                              autoFocus
+                              onFocus={(e) => e.target.select()}
+                              onBlur={(e) => {
+                                const val = e.target.value.trim();
+                                if (val && val !== node.name) {
+                                  setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, name: val } : n));
+                                }
+                                setInlineEditId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') e.target.blur();
+                                if (e.key === 'Escape') { setInlineEditId(null); }
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <span onDoubleClick={(e) => { e.stopPropagation(); setInlineEditId(node.id); }}>{node.name}</span>
+                          )}
                         </span>
                         {node.constraint && (
                           <span className="uml-node-constraint">{`{${node.constraint}}`}</span>
@@ -996,21 +1326,188 @@ export default function App() {
                         <line x1="20" y1="42" x2="6" y2="62" />
                         <line x1="20" y1="42" x2="34" y2="62" />
                       </svg>
-                      <div className="uml-actor-name">{node.name}</div>
+                      <div className="uml-actor-name">
+                        {inlineEditId === node.id ? (
+                          <input
+                            className="inline-name-input"
+                            defaultValue={node.name}
+                            autoFocus
+                            onFocus={(e) => e.target.select()}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val && val !== node.name) {
+                                setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, name: val } : n));
+                              }
+                              setInlineEditId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.target.blur();
+                              if (e.key === 'Escape') { setInlineEditId(null); }
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span onDoubleClick={(e) => { e.stopPropagation(); setInlineEditId(node.id); }}>{node.name}</span>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="uml-usecase">
                       <NodeDeleteButton label={def.label} name={node.name} onDelete={() => deleteNode(node.id)} />
-                      <span className="uml-usecase-name">{node.name}</span>
+                      <span className="uml-usecase-name">
+                        {inlineEditId === node.id ? (
+                          <input
+                            className="inline-name-input"
+                            defaultValue={node.name}
+                            autoFocus
+                            onFocus={(e) => e.target.select()}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val && val !== node.name) {
+                                setNodes((prev) => prev.map((n) => n.id === node.id ? { ...n, name: val } : n));
+                              }
+                              setInlineEditId(null);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.target.blur();
+                              if (e.key === 'Escape') { setInlineEditId(null); }
+                            }}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span onDoubleClick={(e) => { e.stopPropagation(); setInlineEditId(node.id); }}>{node.name}</span>
+                        )}
+                      </span>
                     </div>
+                  )}
+
+                  {/* Resize handles (shown when selected) */}
+                  {isSelected && (
+                    <>
+                      {['top-left', 'top-right', 'bottom-left', 'bottom-right', 'top', 'right', 'bottom', 'left'].map((handle) => (
+                        <div
+                          key={handle}
+                          className={`resize-handle resize-handle--${handle}`}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            const el = nodeRefs.current[node.id];
+                            setResizing({
+                              nodeId: node.id,
+                              handle,
+                              startX: e.clientX,
+                              startY: e.clientY,
+                              origX: node.x,
+                              origY: node.y,
+                              origW: el ? el.offsetWidth : (node.width || 160),
+                              origH: el ? el.offsetHeight : (node.height || 100)
+                            });
+                          }}
+                        />
+                      ))}
+                    </>
                   )}
                 </div>
               );
             })}
+
+            {/* SVG overlay for connector handles (above nodes so they're clickable) */}
+            <svg className="connections-handles-overlay">
+              {connections.map((c) => {
+                if (selectedConnectionId !== c.id) return null;
+                const startCoords = getPortCoords(c.fromNodeId, c.fromPort);
+                const endCoords = getPortCoords(c.toNodeId, c.toPort);
+                if (!startCoords || !endCoords) return null;
+                return (
+                  <g key={c.id}>
+                    {/* Endpoint handle: source */}
+                    <circle
+                      cx={startCoords.x}
+                      cy={startCoords.y}
+                      r={5}
+                      className="connector-handle connector-handle--endpoint"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setDraggingHandle({ connId: c.id, handleType: 'start' });
+                      }}
+                    />
+                    {/* Endpoint handle: target */}
+                    <circle
+                      cx={endCoords.x}
+                      cy={endCoords.y}
+                      r={5}
+                      className="connector-handle connector-handle--endpoint"
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setDraggingHandle({ connId: c.id, handleType: 'end' });
+                      }}
+                    />
+                    {/* Midpoint elbow handle */}
+                    {(() => {
+                      const elbow = getElbowMidpoint(startCoords, endCoords, c.fromPort, c.toPort, c.midOffset);
+                      if (!elbow.axis) return null;
+                      return (
+                        <rect
+                          x={elbow.x - 5}
+                          y={elbow.y - 5}
+                          width={10}
+                          height={10}
+                          className="connector-handle connector-handle--midpoint"
+                          style={{ cursor: elbow.axis === 'x' ? 'ew-resize' : 'ns-resize' }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setDraggingHandle({ connId: c.id, handleType: 'mid', axis: elbow.axis });
+                          }}
+                        />
+                      );
+                    })()}
+                  </g>
+                );
+              })}
+
+              {/* Endpoint drag preview line */}
+              {draggingHandle && (draggingHandle.handleType === 'start' || draggingHandle.handleType === 'end') && draggingHandle.cursorX != null && (() => {
+                const conn = connections.find((c) => c.id === draggingHandle.connId);
+                if (!conn) return null;
+                const fixedEnd = draggingHandle.handleType === 'start'
+                  ? getPortCoords(conn.toNodeId, conn.toPort)
+                  : getPortCoords(conn.fromNodeId, conn.fromPort);
+                return (
+                  <path
+                    d={`M ${fixedEnd.x} ${fixedEnd.y} L ${draggingHandle.cursorX} ${draggingHandle.cursorY}`}
+                    className="connection-line drawing"
+                  />
+                );
+              })()}
+            </svg>
+
+            {/* Draw-to-size preview shape */}
+            {drawing && activeTool && (
+              <div
+                className={`draw-preview draw-preview--${activeTool}`}
+                style={{
+                  left: `${Math.min(drawing.startX, drawing.currentX)}px`,
+                  top: `${Math.min(drawing.startY, drawing.currentY)}px`,
+                  width: `${Math.abs(drawing.currentX - drawing.startX)}px`,
+                  height: `${Math.abs(drawing.currentY - drawing.startY)}px`
+                }}
+              />
+            )}
           </div>
+
+          {/* Welcome overlay when canvas is empty and no tool active */}
+          {nodes.length === 0 && !activeTool && (
+            <div className="canvas-welcome">
+              <h1 className="welcome-title">Silver Gravity UML</h1>
+              <p className="welcome-hint">Select a tool from the sidebar, then click on the canvas to place it</p>
+              <p className="welcome-shortcut"><kbd>⌘</kbd> + <kbd>N</kbd> to add a class</p>
+            </div>
+          )}
         </div>
 
-        {/* Sidebar Configuration Panel */}
+        {/* Sidebar Configuration Panel (hidden when canvas is empty) */}
+        {nodes.length > 0 && (
         <div className="sidebar">
           {/* Section: Properties */}
           {selectedNode ? (
@@ -1100,6 +1597,17 @@ export default function App() {
                 <div className="property-label" style={{ fontSize: '10px', marginTop: '4px', color: 'var(--text-dim)' }}>
                   (Draggable, snapped to 8px coordinates)
                 </div>
+              </div>
+
+              <div className="property-group">
+                <button
+                  className="btn-line"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                  onClick={() => handleFitContent(selectedNode.id)}
+                  title="Auto-fit element bounding box to text content size"
+                >
+                  Fit to content
+                </button>
               </div>
 
               {/* Attributes / Enum values Section (class-family only) */}
@@ -1484,6 +1992,7 @@ export default function App() {
             </div>
           )}
         </div>
+        )}
       </div>
       </div>
     </div>
